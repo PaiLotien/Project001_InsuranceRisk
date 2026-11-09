@@ -1,0 +1,609 @@
+# 车型风险维度映射与归因规则配置
+# 基于渤海财险业务规则调研问卷及车型风险维度映射表
+# 驱动归因分析引擎：根据车型自动选择对应风险维度和规则链
+
+# ============================================================
+# 一、车型风险维度映射
+# ============================================================
+# 每种车型定义多个风险维度，每维度有说明和重点关注指标
+vehicle_dimensions:
+  私家车:
+    alias: [家用车, 家用车_单交强, 家用车_单商业, 家用车_交商共保]
+    dimensions:
+      - name: "能源类型"
+        detail: "新能源车三电系统维修成本高，案均赔款通常高于燃油车。新能源车新车占比高，定价系数偏低，赔付率偏高。"
+        metric: "案均赔款"
+      - name: "新续转"
+        detail: "新保/转保客户缺乏历史理赔数据，风险不确定性高，单均保费偏低。续保客户历史数据完整，风险可预测性强。"
+        metric: "单均保费"
+      - name: "产品组合"
+        detail: "投保交强+商业险客户风险意识高，单均保费显著高于仅投保交强险客户。"
+        metric: "单均保费"
+      - name: "险别组合"
+        detail: "不同险别组合对应不同赔付责任范围，区分风险敞口大小的关键维度。"
+        metric: "预期赔付率"
+      - name: "车龄"
+        detail: "老旧车辆（≥8年）机械故障率上升，维修成本高，出险频度和案均赔款均高于新车。"
+        metric: "出险频度"
+      - name: "过户标志"
+        detail: "过户车首年出险率显著偏高（比非过户车高15%-20%），NCD重置为1.0，原折扣失效。"
+        metric: "出险频度"
+    primary_metrics: [单均保费, 出险频度]
+
+  营业货车:
+    alias: [营业10吨以上, 营业5-10吨, 营业2吨以下, 营业2-5吨]
+    dimensions:
+      - name: "吨位细分"
+        detail: "吨位直接决定运营场景和事故严重程度。重载≥10吨长途运输风险高，轻载<5吨城市配送出险频度高。"
+        metric: "出险频度"
+      - name: "车型分类"
+        detail: "仓栅/栏板/牵引/自卸等，自卸车使用环境最恶劣（矿山/工地），出险频度和案均赔款均最高。"
+        metric: "案均赔款"
+    primary_metrics: [出险频度, 案均赔款]
+
+  出租租赁车:
+    alias: [出租租赁车]
+    dimensions:
+      - name: "能源类型"
+        detail: "新能源出租车运营成本低但维修成本高，案均赔款显著高于燃油车。"
+        metric: "案均赔款"
+      - name: "区域"
+        detail: "一线城市交通拥堵、路况复杂，出险频度显著高于二三线城市，运营里程长。"
+        metric: "出险频度"
+      - name: "运营模式"
+        detail: "网约车平台管理相对规范，非平台巡游出租车管理分散，风险不确定性更高。"
+        metric: "出险频度"
+    primary_metrics: [出险频度]
+
+  特种车:
+    alias: [特种车, 特一, 特二, 特三, 特四]
+    dimensions:
+      - name: "特一（罐式车）"
+        detail: "运输危险品或大宗液体，事故后果严重。"
+        metric: "案均赔款"
+      - name: "特二（起重机）"
+        detail: "单次事故损失极大（设备+第三方+人伤），案均赔款最高。"
+        metric: "案均赔款"
+      - name: "特三/特四"
+        detail: "高风险特种作业车辆，使用场景特殊。"
+        metric: "案均赔款"
+    primary_metrics: [案均赔款]
+
+  摩托车:
+    alias: [摩托车, 摩托车_电动, 摩托车_燃油]
+    dimensions:
+      - name: "能源类型"
+        detail: "燃油摩托车速度快、事故严重程度高。电动摩托车城市高频使用，出险频度偏高。"
+        metric: "出险频度"
+      - name: "排量"
+        detail: "大排量（＞250cc）速度快、事故损失大，案均显著高于小排量。"
+        metric: "案均赔款"
+    primary_metrics: [出险频度]
+
+  企业车:
+    alias: [企业车]
+    dimensions:
+      - name: "车队规模"
+        detail: "大车队（≥50辆）有专职车管和安全培训，出险频度低于小车队和单机车。"
+        metric: "出险频度"
+      - name: "使用性质"
+        detail: "商务接待行驶里程长、出险频度最高。通勤用车路线固定、风险可控。"
+        metric: "出险频度"
+      - name: "车龄"
+        detail: "企业车辆更换周期长，老旧车辆维修成本上升。"
+        metric: "案均赔款"
+    primary_metrics: [出险频度, 单均保费]
+
+  公交车:
+    alias: [公交车]
+    dimensions:
+      - name: "能源类型"
+        detail: "新能源公交车电池组成本极高，电池损坏赔款巨大。CNG车辆气瓶存在安全隐患。"
+        metric: "案均赔款"
+      - name: "城市等级"
+        detail: "一线城市交通复杂、行人密集，出险频度显著偏高。"
+        metric: "出险频度"
+      - name: "运营线路"
+        detail: "市区线路出险频度高但损失可控。城乡线路车速快、事故严重程度高。BRT有专用路权，风险最低。"
+        metric: "案均赔款"
+    primary_metrics: [案均赔款, 出险频度]
+
+  公路客运:
+    alias: [公路客运]
+    dimensions:
+      - name: "运营性质"
+        detail: "班线客运路线固定、出险频度最低。旅游包车路况陌生、出险频度较高。定制客运灵活性强、管控最难。"
+        metric: "出险频度"
+      - name: "行驶区域"
+        detail: "跨省客运行驶里程长、路况复杂、疲劳驾驶风险高。"
+        metric: "案均赔款"
+      - name: "车龄"
+        detail: "老旧客车机械故障率上升，涉及公众安全，后果严重。"
+        metric: "案均赔款"
+    primary_metrics: [出险频度, 案均赔款]
+
+  非营业客车:
+    alias: [非营业2吨以下, 非营业5-10吨, 非营业10吨以上, 非营业2-5吨, 机关车]
+    dimensions:
+      - name: "座位数"
+        detail: "座位数越多，使用场景越复杂，涉及人员伤亡责任更大。"
+        metric: "出险频度"
+      - name: "车龄"
+        detail: "车龄影响机械可靠性和维修成本。老旧车辆出险频度和案均赔款均高于新车。"
+        metric: "案均赔款"
+      - name: "吨位细分"
+        detail: "2吨以下多为个人代步，关注单均保费充足度。5-10吨多用于企事业单位，关注出险频度。"
+        metric: "单均保费"
+    primary_metrics: [出险频度, 单均保费]
+
+# ============================================================
+# 二、三要素联动分析
+# ============================================================
+tri_factor_analysis:
+  reference_thresholds:
+    claim_frequency_percent: 25
+    average_premium_yuan: 2000
+    business_confirmed: false
+  description: "出险频度、案均赔款、单均保费三项相互关联，需要综合分析"
+  rules:
+    - condition: "出险频度↑ + 案均赔款↑"
+      severity: "最高"
+      conclusion: "赔付率快速恶化，双重冲击。出险频度上升表示事故概率增加（可能原因：核保政策松动、风险结构变化）；案均赔款上升表示每次事故损失增大（可能原因：维修成本上涨、人伤标准提高）。两者叠加是最危险的信号。"
+      suggestions:
+        - "立即排查核保政策是否松动"
+        - "关注维修定损标准，核查超额赔付"
+        - "自动升级预警等级并推送管理层"
+    - condition: "出险频度↑ + 单均保费↓"
+      severity: "高"
+      conclusion: "事故概率增加的同时保费充足率下降。可能原因：业务结构向低保费车型倾斜、竞争性降价策略导致折扣过大、新车/过户车占比上升。"
+      suggestions:
+        - "复核自主定价系数"
+        - "评估是否存在赔本赚吆喝的业务"
+        - "优化业务结构"
+    - condition: "案均赔款↑ + 单均保费↓"
+      severity: "高"
+      conclusion: "每次事故损失增加但保费收入下降。可能原因：维修成本上涨未被定价反映、高赔付车型享受了过低折扣。"
+      suggestions:
+        - "上调自主系数以反映真实风险"
+        - "优化维修定损合作渠道"
+    - condition: "三项同时出现"
+      severity: "极高"
+      conclusion: "出险频度、案均赔款、单均保费三项指标同时恶化，业务面临系统性风险。系统自动升级预警等级并推送管理层。"
+      suggestions:
+        - "立即启动专项风险评估"
+        - "暂停高风险业务的低价承保"
+        - "全面复核核保政策和定价策略"
+
+# ============================================================
+# 三、归因规则链（按车型）
+# ============================================================
+attribution_rules:
+  # --- 私家车 ---
+  私家车:
+    - id: PC-001
+      conditions:
+        - dimension: 新续转
+          operator: in
+          value: [新保, 转保]
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: 1.0
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.1
+      conclusion: "新保/转保客户缺乏历史数据，风险不确定性高，自主定价系数偏低，出险频度高于均值。"
+      suggestions:
+        - "建议复核新保/转保业务自主系数，确保不低于均值"
+        - "限制新保业务的车损险承保范围"
+    - id: PC-002
+      conditions:
+        - dimension: 过户标志
+          operator: eq
+          value: true
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: 1.0
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.2
+      conclusion: "过户车本身风险较高（首年出险率比非过户车高15%-20%），叠加定价偏低，进一步推高出险频度。"
+      suggestions:
+        - "建议过户车自主系数不低于1.1"
+        - "关注NCD重置后保费变化是否充分覆盖新增风险"
+    - id: PC-003
+      conditions:
+        - dimension: 能源类型
+          operator: eq
+          value: 新能源
+        - metric: 单均保费
+          operator: lt
+          value_ref: 燃油车均值
+          multiplier: 0.85
+        - metric: 预期赔付率
+          operator: gt
+          value_ref: 65
+      conclusion: "新能源车维修成本高，定价体系尚不成熟，赔付率持续走高。"
+      suggestions:
+        - "建议上调新能源车自主系数"
+        - "优化维修定损策略，控制案均赔款"
+    - id: PC-004
+      conditions:
+        - dimension: 车龄
+          operator: gte
+          value: 8
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: 0.9
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.1
+      conclusion: "老旧车辆（≥8年）维修成本高（停产配件稀缺），低价承保风险大。"
+      suggestions:
+        - "建议老旧车提高自主系数"
+        - "限制车损险承保范围"
+    - id: PC-005
+      conditions:
+        - dimension: 新续转
+          operator: in
+          value: [新保, 转保]
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: mean
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+      conclusion: "新保客户缺乏历史数据，定价保守度不足，出险频度偏高。"
+      suggestions:
+        - "建议新保业务自主系数设定不低于均值"
+        - "限制新保业务的车损险承保范围"
+
+  # --- 新能源 ---
+  新能源:
+    - id: EV-001
+      conditions:
+        - metric: 预期赔付率
+          operator: gt
+          value_ref: 70
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.2
+      conclusion: "新能源车维修成本高，案均赔款持续走高，赔付率居高不下。"
+      suggestions:
+        - "建议上调自主系数"
+        - "优化维修定损合作渠道"
+
+  # --- 营业货车 ---
+  营业货车:
+    - id: TR-001
+      conditions:
+        - dimension: 吨位细分
+          operator: eq
+          value: 重载
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.15
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.3
+      conclusion: "重载货车运营风险高，长途行驶疲劳驾驶风险大，事故损失大。"
+      suggestions:
+        - "建议重载货车核保从严，自主系数提升至1.2以上"
+        - "加强驾驶员安全培训和管理"
+    - id: TR-002
+      conditions:
+        - dimension: 车型分类
+          operator: eq
+          value: 自卸车
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.3
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+      conclusion: "自卸车使用环境恶劣（矿山/工地），超载现象普遍，案均赔款极高。"
+      suggestions:
+        - "建议自卸车承保时加验车况"
+        - "自主系数从严"
+    - id: TR-003
+      conditions:
+        - dimension: 吨位细分
+          operator: eq
+          value: 轻载
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+          multiplier: 0.9
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+      conclusion: "轻载货车定价竞争激烈，但出险频度不低，单均保费难以覆盖风险。"
+      suggestions:
+        - "建议轻载货车基础系数适当上调"
+    - id: TR-004
+      conditions:
+        - dimension: 吨位细分
+          operator: eq
+          value: 中载
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.1
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+      conclusion: "中型货车兼顾长途与城市配送，运营环境复杂。"
+      suggestions:
+        - "建议加强核保筛查，重点关注行驶区域和运载类型"
+
+  # --- 出租租赁车 ---
+  出租租赁车:
+    - id: TX-001
+      conditions:
+        - dimension: 区域
+          operator: eq
+          value: 一线城市
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.3
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+      conclusion: "大城市行驶里程长、路况复杂，出险概率高。"
+      suggestions:
+        - "建议一线城市出租车自主系数上调"
+    - id: TX-002
+      conditions:
+        - dimension: 运营模式
+          operator: eq
+          value: 非平台
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+      conclusion: "非平台出租车缺乏数据支撑，出险频度更高但保费更低。"
+      suggestions:
+        - "建议非平台出租车核保从严，争取费率上浮"
+
+  # --- 特种车 ---
+  特种车:
+    - id: SP-001
+      conditions:
+        - dimension: 分类
+          operator: eq
+          value: 特二
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.5
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+      conclusion: "起重机单次事故损失极大（设备+第三方+人伤）。"
+      suggestions:
+        - "建议起重机承保需专项核保，独立评估"
+    - id: SP-002
+      conditions:
+        - dimension: 分类
+          operator: eq
+          value: 特一
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.3
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+      conclusion: "罐式车运输危险品或大宗液体，事故后果严重。"
+      suggestions:
+        - "建议核保从严，承保前严格审核运输资质和安全记录"
+    - id: SP-003
+      conditions:
+        - dimension: 分类
+          operator: in
+          value: [特三, 特四]
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+      conclusion: "高风险特种作业车辆（消防/救护/高空作业等）。"
+      suggestions:
+        - "建议提高核保等级，个案评估"
+
+  # --- 摩托车 ---
+  摩托车:
+    - id: MC-001
+      conditions:
+        - dimension: 能源类型
+          operator: eq
+          value: 燃油
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+      conclusion: "燃油摩托车风险高但定价偏低。"
+      suggestions:
+        - "建议上调燃油摩托自主系数"
+    - id: MC-002
+      conditions:
+        - dimension: 能源类型
+          operator: eq
+          value: 电动
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+      conclusion: "电动摩托车在城市中高频使用，事故损失偏高。"
+      suggestions:
+        - "关注案均赔款，建议调整险别组合"
+
+  # --- 企业车 ---
+  企业车:
+    - id: EN-001
+      conditions:
+        - dimension: 车队规模
+          operator: eq
+          value: 单机车
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: mean
+          multiplier: 0.9
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.2
+      conclusion: "单机车缺乏规模效应和专职车管，出险频度显著偏高，且自主系数偏低，保费充足率不足。"
+      suggestions:
+        - "建议单机车核保从严，自主系数上调至不低于0.9"
+    - id: EN-002
+      conditions:
+        - dimension: 使用性质
+          operator: eq
+          value: 商务接待
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+          multiplier: 0.9
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.2
+      conclusion: "商务接待用车行驶里程长、出险频度高，但单均保费偏低，可能存在竞争性让利。"
+      suggestions:
+        - "建议商务接待用车自主系数适当上调，评估是否存在低价竞争"
+    - id: EN-003
+      conditions:
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+          multiplier: 0.85
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+      conclusion: "企业车整体单均保费偏低但出险频度偏高，可能存在大客户竞争过度让利。"
+      suggestions:
+        - "建议排查企业车承保是否因大客户竞争过度让利，评估最低自主系数底线"
+
+  # --- 公交车 ---
+  公交车:
+    - id: BU-001
+      conditions:
+        - dimension: 能源类型
+          operator: eq
+          value: 新能源
+        - metric: 案均赔款
+          operator: gt
+          value_ref: 燃油车均值
+          multiplier: 1.2
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: mean
+          multiplier: 0.9
+      conclusion: "新能源公交车电池维修成本高、案均偏高，同时自主系数过低，保费充足率严重不足（当前公交车整体自主系数仅0.571，已是全辖最低）。"
+      suggestions:
+        - "建议优化新能源公交车维修定损渠道"
+        - "上调自主系数至少至0.65以上"
+    - id: BU-002
+      conditions:
+        - dimension: 运营线路
+          operator: eq
+          value: 城乡
+        - metric: 案均赔款
+          operator: gt
+          value_ref: 市区均值
+          multiplier: 1.2
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.1
+      conclusion: "城乡线路车速快、路况复杂，案均和频度双高。"
+      suggestions:
+        - "建议城乡公交加强安全管理和驾驶员培训"
+        - "评估自主系数上调"
+    - id: BU-003
+      conditions:
+        - metric: 预期赔付率
+          operator: gt
+          value_ref: 96.08
+      conclusion: "公交车整体预期赔付率异常偏高，为全辖最高之一，需下钻定位。"
+      suggestions:
+        - "建议优先查看能源类型和运营线路细分数据"
+        - "重点关注新能源和城乡线路"
+
+  # --- 公路客运 ---
+  公路客运:
+    - id: GK-001
+      conditions:
+        - dimension: 行驶区域
+          operator: eq
+          value: 跨省
+        - metric: 自主定价系数
+          operator: lt
+          value_ref: mean
+          multiplier: 0.9
+        - metric: 案均赔款
+          operator: gt
+          value_ref: 省内均值
+          multiplier: 1.3
+      conclusion: "跨省客运行驶里程长、疲劳风险高，案均显著高于省内，自主系数偏低（当前公路客运整体自主系数仅0.616），保费充足率不足。"
+      suggestions:
+        - "建议跨省客运自主系数上调至不低于0.7"
+        - "加强驾驶员排班管理"
+    - id: GK-002
+      conditions:
+        - dimension: 运营性质
+          operator: eq
+          value: 旅游包车
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+          multiplier: 0.9
+        - metric: 出险频度
+          operator: gt
+          value_ref: 班线客运均值
+          multiplier: 1.2
+      conclusion: "旅游包车路况陌生、出险频度高，但单均保费偏低。"
+      suggestions:
+        - "建议旅游包车业务核保从严，重点审核旅行社资质"
+        - "自主系数适当上调"
+    - id: GK-003
+      conditions:
+        - metric: 案均赔款
+          operator: gt
+          value_ref: mean
+          multiplier: 1.2
+      conclusion: "公路客运整体案均赔款异常偏高，需下钻定位。"
+      suggestions:
+        - "建议优先查看行驶区域细分数据"
+        - "跨省客运是高风险重点"
+
+  # --- 非营业客车 ---
+  非营业客车:
+    - id: NK-001
+      conditions:
+        - metric: 出险频度
+          operator: gt
+          value_ref: mean
+          multiplier: 1.15
+        - metric: 单均保费
+          operator: lt
+          value_ref: mean
+      conclusion: "非营业客车出险频度偏高但保费充足率不足，风险收益不匹配。"
+      suggestions:
+        - "建议排查该车型承保是否存在竞争性让利"
+        - "评估自主系数是否需要上调"

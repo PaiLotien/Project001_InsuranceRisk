@@ -1,0 +1,99 @@
+# 预警规则配置
+#
+# 规则来源：预警规则配置表.xlsx、业务规则调研问卷.xlsx。
+# 说明：R001-R004 在配置表中只有指标目录，没有给出阈值，因此不作为可执行规则；
+# R005-R008 是当前已给出阈值的业务规则；R009 的阈值尚未确认，暂不启用。
+# R010 保留系统原有的100%经验红线，不属于配置表已给出的四条规则，仍需业务确认。
+# 旧编号对照：原R001->R005，原R002->R006，原R004->R007，原R003->R008，原R005->R010。
+#
+# operator:
+#   gt/gte/lt/lte    绝对值比较
+#   change_gt        对指定同比字段做“上升超过”比较
+#   change_lt        对指定环比字段做“下降超过”比较
+
+rules:
+  - id: R005
+    metric: 预期成本率
+    operator: gt
+    threshold: 90
+    unit: percent
+    level: yellow
+    enabled: true
+    description: "预期成本率超过90%，触发黄色预警。预期成本率=预期赔付率+成本率1"
+    applies_to: [T1, T2]
+    source: "预警规则配置表.xlsx R005；第一轮问卷第二部分问题1、2"
+    note: "指标对应关系、预警等级与推送对象在原表中仍需确认；页面阈值可由用户调整。"
+
+  - id: R006
+    metric: 单均保费
+    operator: change_lt
+    threshold: -10
+    unit: percent
+    level: yellow
+    enabled: true
+    change_dimension: 月环比
+    description: "单均保费月环比下降超过10%，提示保费充足度可能不足。"
+    applies_to: [T2]
+    source: "预警规则配置表.xlsx R006；第二轮问卷问题6"
+    note: "本适配器读取月环比字段（以百分数数值输入，如-11）；非短期单口径尚需上游保证，无字段时不触发。"
+
+  - id: R007
+    metric: 案均赔款
+    operator: change_gt
+    threshold: 20
+    unit: percent
+    level: yellow
+    change_dimension: 月同比
+    enabled: true
+    description: "案均赔款月同比上升超过20%，提示单案赔付金额可能恶化。"
+    applies_to: [T2, T4]
+    source: "预警规则配置表.xlsx R007；第二轮问卷问题6"
+    note: "本适配器读取月同比字段（以百分数数值输入，如21）；原表未限定同比周期，其他周期适配待完成，等级与推送对象待确认。"
+
+  - id: R008
+    metric: 出险频度
+    operator: change_gt
+    threshold: 1
+    unit: point
+    level: yellow
+    change_dimension: 月同比
+    enabled: true
+    description: "出险频度月同比上升超过1个百分点，提示事故频率可能恶化。"
+    applies_to: [T2, T3]
+    preconditions:
+      - metric: 满期保费
+        operator: gt
+        value: 100
+        unit: wan_yuan
+        time_dimension: 当月
+      - metric: 满期进度
+        operator: gt
+        value: 2
+        unit: month
+        time_dimension: 当月
+    source: "预警规则配置表.xlsx R008；第二轮问卷问题10"
+    note: "当前适配月同比与当月前置数据；两个条件必须同时满足，保费单位万元、进度单位月。非短期单口径需上游保证；等级与推送对象待确认。"
+
+  - id: R009
+    metric: 自主系数均值商业
+    operator: configured
+    threshold: null
+    unit: coefficient
+    level: yellow
+    enabled: false
+    description: "自主系数均值商业的异常规则待业务确认。"
+    applies_to: [T2]
+    source: "预警规则配置表.xlsx R009；第一轮问卷第二部分问题4"
+    note: "原表未填写比较方式、阈值和是否启用，不得自行推断。"
+
+  - id: R010
+    metric: 预期成本率
+    operator: gt
+    threshold: 100
+    unit: percent
+    level: red
+    enabled: true
+    description: "预期成本率超过100%（通用盈亏线），触发红色预警。"
+    applies_to: [T1, T2]
+    source: "系统原有业务经验阈值；问卷E4仅为问题设置说明，并非业务确认答复"
+    note: "保留既有行为，待业务确认，不计入Excel四条明确阈值规则。"

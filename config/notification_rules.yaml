@@ -1,0 +1,487 @@
+branch_contacts:
+  全辖:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营总监
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部分管副总裁
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  湖北:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 湖北分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 湖北分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  江西:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 江西分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 江西分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  江苏:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 江苏分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 江苏分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  浙江:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 浙江分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 浙江分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  河北:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 河北分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 河北分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  陕西:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 陕西分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 陕西分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（西北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  四川:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 四川分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 四川分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  广西:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 广西分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 广西分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（西南片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  重庆:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 重庆分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 重庆分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（西南片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  河南:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 河南分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 河南分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  湖南:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 湖南分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 湖南分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  山东:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 山东分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 山东分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  深圳:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 深圳分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 深圳分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  辽宁:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 辽宁分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 辽宁分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（东北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  山西:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 山西分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 山西分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（华北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  安徽:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 安徽分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 安徽分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  内蒙:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 内蒙古分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 内蒙古分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（华北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  青岛:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 青岛分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 青岛分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  北京:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 北京分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 北京分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（华北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  天津:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 天津分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 天津分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（华北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  宁波:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 宁波分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 宁波分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  上海:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 上海分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 上海分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  新疆:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 新疆分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 新疆分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（西北片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+  云南:
+    branch_manager:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 云南分公司车险经理
+    deputy_gm:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 云南分公司分管总
+    hq_operations:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部运营管理岗（西南片区）
+    hq_director:
+      name: 演示联系人
+      email: demo@example.invalid
+      title: 总公司车险部部门长
+alert_escalation:
+  yellow:
+    roles:
+    - branch_manager
+    - hq_operations
+    description: 黄色预警：通知分公司车险经理 + 总公司车险运营管理人员
+    priority: 普通
+    response_hours: 48
+  orange:
+    roles:
+    - branch_manager
+    - deputy_gm
+    - hq_operations
+    description: 橙色预警：通知分公司车险经理 + 分公司分管总 + 总公司车险运营管理人员
+    priority: 紧急
+    response_hours: 24
+  red:
+    roles:
+    - branch_manager
+    - deputy_gm
+    - hq_operations
+    - hq_director
+    description: 红色预警：通知以上全部 + 总公司车险部部门长
+    priority: 特急
+    response_hours: 4
+metric_departments:
+  预期赔付率:
+    dept: 车险部-精算组
+    cc_roles: []
+  成本率1:
+    dept: 车险部-渠道管理组
+    cc_roles: []
+  预期成本率:
+    dept: 车险部-运营管理组
+    cc_roles: []
+  累计出险频度:
+    dept: 车险部-核保管理组
+    cc_roles: []
+  案均赔款:
+    dept: 车险部-理赔管理组
+    cc_roles: []
+  单均保费:
+    dept: 车险部-定价管理组
+    cc_roles: []
+  签单保费:
+    dept: 车险部-业务管理组
+    cc_roles: []
+  保费占比:
+    dept: 车险部-运营管理组
+    cc_roles: []
+email_config:
+  sender: demo@example.invalid
+  sender_name: 渤海财险车险智能风控系统
+  subject_prefix: '[车险风控预警]'
+  footer: '此邮件由渤海财险车险智能风控系统（IRDS）自动生成。
+
+    如需退订或调整通知设置，请联系系统管理员。
+
+    系统管理员：信息科技部 王工（demo@example.invalid）
+
+    '

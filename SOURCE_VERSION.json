@@ -1,0 +1,9 @@
+{
+  "release_date": "2026-11-09",
+  "release_revision": "feedback_1106",
+  "git_head": "ae67d2a88aff588074d695d8e3ead4f9548e3ce2",
+  "snapshot": "current working tree, including uncommitted changes",
+  "sanitized_files": [
+    "config/notification_rules.yaml"
+  ]
+}

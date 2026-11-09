@@ -1,0 +1,42 @@
+# 数据质量校验规则
+# 来源：数据质量校验规则表.xlsx
+#
+# 校验与阻断流程必须分开：DQ001 当前可在单表中执行；DQ002 需要 T2/T7 两张表；
+# DQ003 受工作日和非工作日业务量差异影响，保留配置但默认关闭。
+
+rules:
+  - id: DQ001
+    name: 保费占比合计
+    enabled: true
+    mode: single_table
+    applies_to: [T1, T2]
+    tolerance_percentage_points: 1.0
+    description: "主表非合计车型的保费占比合计应约等于100%。"
+    failure_message: "保费占比合计异常，请检查数据是否遗漏或重复。"
+    source: "数据质量校验规则表.xlsx DQ001"
+    note: "子表不适用；当前页面尚未完整区分主/子表。±1个百分点沿用原实现而非业务已确认值。中止流程仅为参考建议，未启用。"
+
+  - id: DQ002
+    name: 跨表总保费一致性
+    enabled: true
+    mode: cross_table
+    left_report: T2
+    left_metric: 当月累计签单保费
+    right_report: T7
+    right_metric: 月签单保费
+    tolerance: 0.0
+    description: "T2当月累计签单保费与T7对应机构月签单保费应一致。"
+    failure_message: "跨表总保费不一致，请核查数据口径或抽取时间。"
+    source: "数据质量校验规则表.xlsx DQ002"
+    note: "原表的中止预警建议标注为仅供参考；系统先报告结果，不擅自中止用户流程。"
+
+  - id: DQ003
+    name: 日累计和月累计的粗略关系
+    enabled: false
+    mode: single_table
+    applies_to: [T2]
+    ratio_tolerance: 0.20
+    description: "当日值×当月天数与当月累计值仅作粗略提示。"
+    failure_message: "日累计与月累计关系偏离，请结合工作日口径复核。"
+    source: "数据质量校验规则表.xlsx DQ003"
+    note: "由于工作日/非工作日差异大，暂不启用；20%仅为原表举例，非业务确认阈值。"

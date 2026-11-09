@@ -1,0 +1,9 @@
+# 数据漂移监测阈值。它们只负责“提示变化”，不直接改变业务预警等级。
+drift:
+  minimum_rows: 20
+  psi:
+    stable_lt: 0.10
+    watch_lt: 0.25
+  missing_rate:
+    stable_delta_lt: 0.05
+    watch_delta_lt: 0.20

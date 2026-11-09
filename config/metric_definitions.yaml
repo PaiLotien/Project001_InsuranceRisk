@@ -1,0 +1,96 @@
+# 指标定义与计算规则
+# 每个指标包含:
+#   key: 指标标识
+#   name: 中文名称
+#   alias: 别名（报表中可能出现的不同名称）
+#   type: 数据类型 (ratio: 比例型, absolute: 绝对值型, coefficient: 系数型)
+#   unit: 单位
+#   formula: 计算公式（如有）
+#   change_method: 变化率计算方法 (subtract: 直接相减, ratio: (当期-基期)/基期, raw: 直接展示)
+
+metrics:
+  - key: premium_pct
+    name: 保费占比
+    aliases: [保费占比, 保费占比(%) ]
+    type: ratio
+    unit: "%"
+    change_method: subtract
+    description: "该车型签单保费 / 全辖总签单保费，比例型指标"
+
+  - key: signed_premium
+    name: 签单保费
+    aliases: [签单保费, 签单保费(万元)]
+    type: absolute
+    unit: 万元
+    change_method: ratio
+    description: "包含商业险+交强险的签单保费"
+
+  - key: expected_loss_ratio
+    name: 预期赔付率
+    aliases: [预期赔付率, 预期赔付率(%)]
+    type: ratio
+    unit: "%"
+    change_method: subtract
+    formula: "Σ(预期赔款) / Σ(签单保费) × 100"
+    description: "基于保单级精算模型的保费加权预期赔付率"
+
+  - key: cost_ratio_1
+    name: 成本率1
+    aliases: [成本率1, 成本率1(%), 保单成本率, 费用率]
+    type: ratio
+    unit: "%"
+    change_method: subtract
+    description: "保单成本率，包含市场费用率等"
+
+  - key: expected_cost_ratio
+    name: 预期成本率
+    aliases: [预期成本率, 预期成本率(%), 预期直接成本率]
+    type: ratio
+    unit: "%"
+    change_method: subtract
+    formula: "预期赔付率 + 成本率1"
+    description: "核心监控指标：预期成本率 = 预期赔付率 + 成本率1"
+
+  - key: autonomous_coefficient
+    name: 自主定价系数
+    aliases: [自主定价系数, 自主系数, 自主系数均值]
+    type: coefficient
+    unit: ""
+    change_method: raw
+    description: "实际业务均值，昨天签单商业险保单的自主系数加权均值"
+
+  - key: avg_premium
+    name: 单均保费
+    aliases: [单均保费, 单均保费(元)]
+    type: absolute
+    unit: 元
+    change_method: ratio
+    formula: "签单保费 / 承保件数"
+    description: "每张保单的平均保费"
+
+  - key: claim_frequency
+    name: 累计出险频度
+    aliases: [累计出险频度, 出险频度, 满期出险频度]
+    type: ratio
+    unit: "%"
+    change_method: subtract
+    formula: "(已决案件数 + RBNR) / 承保件数"
+    description: "当年1月1日至昨日的累计出险频度"
+
+  - key: combined_ratio
+    name: 两率和
+    aliases: [两率和, 两率和(%)]
+    type: ratio
+    unit: "%"
+    change_method: subtract
+    formula: "赔付率 + 费用率"
+    description: "赔付率 + 费用率，团车业务核心指标"
+
+  - key: avg_claim_amount
+    name: 案均赔款
+    aliases: [案均赔款, 案均赔款(元)]
+    type: absolute
+    unit: 元
+    change_method: ratio
+    formula: "累计已决赔款 / 已决案件数"
+    description: "平均每个案件的赔付金额"

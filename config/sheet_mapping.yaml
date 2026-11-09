@@ -1,0 +1,76 @@
+# Sheet 名称到报表类型的映射规则
+# 用于自动识别上传Excel中的Sheet属于哪种报表
+# 匹配规则: sheet名称中包含任一关键字即判定为对应报表类型
+
+mappings:
+  - report_type: T1
+    keywords:
+      - "分车型预期成本率监控表（日）"
+      - "分车型预期成本率监控表(日)"
+    description: "分车型预期成本率监控表（日）——每日业务快照"
+    priority: 1
+    category: "保批单生成日期"
+
+  - report_type: T2
+    keywords:
+      - "分车型预期成本率监控表（日月年）"
+      - "分车型预期成本率监控表(日月年)"
+    description: "分车型预期成本率监控表（日月年）——多时间窗口对比"
+    priority: 1
+    category: "保批单生成日期"
+
+  - report_type: T3
+    keywords:
+      - "满期出险频度进展监测表"
+      - "满期出险频度"
+    description: "全辖满期出险频度进展监测表——事故率演变轨迹"
+    priority: 1
+    category: "保险起期"
+
+  - report_type: T4
+    keywords:
+      - "团车追踪"
+      - "团车码"
+      - "业审会"
+    description: "团车追踪表——团车项目个性化履约监控"
+    priority: 1
+    category: "保批单生成日期"
+
+  - report_type: T5
+    keywords:
+      - "费用进展监测表"
+      - "成本率进展监测表"
+    description: "全辖费用进展监测表——保单成本率月度累进"
+    priority: 1
+    category: "保险起期"
+
+  - report_type: T6
+    keywords:
+      - "单均保费进展监测表"
+    description: "全辖商业险单均保费进展监测表——保费充足度趋势"
+    priority: 1
+    category: "保险起期"
+
+  - report_type: T7
+    keywords:
+      - "分机构车险日平台监控表"
+      - "分机构车险日平台"
+    description: "分机构车险日平台监控表——24家机构保费达成监控"
+    priority: 1
+    category: "保批单生成日期"
+
+  - report_type: T8
+    keywords:
+      - "满期赔付率日报跟踪表"
+      - "满期赔付率日报"
+    description: "全辖满期赔付率日报跟踪表——满期赔付率逐日走势"
+    priority: 1
+    category: "保险起期"
+
+  - report_type: T9
+    keywords:
+      - "家用车"
+    description: "家用车-共保-新续转-占比和成本监控表"
+    priority: 2
+    category: "保批单生成日期"
+    note: "T9优先级较低，因为'家用车'关键词可能与其他Sheet重叠"

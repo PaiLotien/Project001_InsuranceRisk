@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [".venv", "data", "docs", "management", "result"]
+
+[tool.ruff.lint]
+# First CI gate: catch syntax and undefined-name regressions without forcing
+# a broad style rewrite of the existing application.
+select = ["E9", "F63", "F7", "F82"]
