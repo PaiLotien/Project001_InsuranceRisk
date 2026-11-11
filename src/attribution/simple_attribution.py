@@ -216,7 +216,7 @@ def analyze(row, df_peer=None, *, yellow_threshold: float | None = None,
             if value is not None and math.isfinite(value):
                 result.items.append(AttrItem(
                     dimension="三要素", factor_name=name, contribution_pct=0,
-                    description=f"fallback：{name} {value:g}；仅作水平参考，无法量化历史贡献",
+                    description=f"降级说明：{name} {value:g}；仅作水平参考，无法量化历史贡献",
                     is_primary=False,
                 ))
 

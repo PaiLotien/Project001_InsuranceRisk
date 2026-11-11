@@ -59,7 +59,7 @@ def test_ai_page_uses_configured_thresholds_without_model_call():
     path = Path(__file__).resolve().parents[1] / 'src/dashboard/streamlit_app.py'
     health={'online':False,'chat_model':False,'embed_model':False,'manifest':{},'stale':True}
     result={'raw':'测试','json':{'answer':'测试说明','evidence':[],'suggestions':[],'uncertainty':[],'refused':False},'hits':[],'invalid_citations':[],'untraced_numbers':[],'timing':{}}
-    with patch('src.alerts.thresholds.configured_thresholds',return_value={'yellow':88,'orange':105,'red':105}), patch('src.advisor.service.advisor_health',return_value=health):
+    with patch('src.alerts.thresholds.configured_thresholds',return_value={'yellow':88,'orange':95,'red':105}), patch('src.advisor.service.advisor_health',return_value=health):
         app=AppTest.from_file(path,default_timeout=30).run()
         app.sidebar.radio[0].set_value('AI 风控顾问').run()
         with patch('src.advisor.service.ask_advisor',return_value=result) as ask:

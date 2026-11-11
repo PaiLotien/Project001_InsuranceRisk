@@ -89,7 +89,7 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
         if isinstance(conditions, dict):
             conditions = [conditions]
 
-        for condition in conditions:
+        def check(condition):
             condition_metric = condition.get("metric", "")
             candidates = []
             for m in metrics:
@@ -117,7 +117,10 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
             matched = COMPARATORS.get(op, lambda a,b: False)(left,right)
             if not matched:
                 return False
-        return True
+            return True
+
+        results = [check(c) for c in conditions]
+        return any(results) if rule.get("precondition_logic", "all") == "any" else all(results)
 
     # 获取所有有此指标的车型数据。变化类规则只读取明确标注的同比/环比字段，
     # 不把“当日值”误当成历史基准，避免在缺少历史数据时制造假预警。

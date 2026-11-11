@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pandera.pandas as pa
 import yaml
+from src.utils.helpers import is_total_row
 
 ROOT = Path(__file__).resolve().parents[2]
 ISSUE_COLUMNS = ["sheet", "row", "column", "rule_id", "severity", "message"]
@@ -80,8 +81,8 @@ def validate_frame(frame, sheet="", first_data_row=2, report="T2"):
             for _, group in df.groupby(group_columns, dropna=False, sort=False):
                 if kind == "share" and "表类型" in group and not group["表类型"].eq("主表").all():
                     continue
-                totals = group[group["车型"].eq("合计")]
-                details = group[~group["车型"].eq("合计")]
+                totals = group[group.apply(is_total_row, axis=1)]
+                details = group[~group.apply(is_total_row, axis=1)]
                 if kind == "total_required":
                     if len(totals) != 1:
                         add(rule, list(group.index[:1]), "车型", "每机构须有且只有一条合计行")
@@ -113,5 +114,6 @@ def validate_frame(frame, sheet="", first_data_row=2, report="T2"):
 
 
 def top3(issues):
+    if issues.empty: return []
     counts = Counter(zip(issues["rule_id"], issues["message"]))
     return [{"rule_id": r, "message": m, "count": n} for (r, m), n in counts.most_common(3)]

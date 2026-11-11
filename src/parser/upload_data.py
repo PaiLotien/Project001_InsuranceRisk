@@ -93,6 +93,7 @@ def read_uploaded_data(uploaded_file, source_sheet: str | None = None) -> pd.Dat
         if period is None:
             raise UploadReadError("主表缺少当日、当月或当年绝对值，不能用同比值计算成本率")
         frame = pd.concat(selected, ignore_index=True)
+        all_periods = frame.to_dict("records")
         frame = frame[frame["期间"].eq(period)].copy()
 
     if "来源Sheet" not in frame.columns:
@@ -104,8 +105,11 @@ def read_uploaded_data(uploaded_file, source_sheet: str | None = None) -> pd.Dat
     smart_issues = validate_frame(frame, source_sheet)
     frame = apply_alert_rules(frame)
     frame = annotate_validation(frame, validate_core_frame(frame))
-    frame.attrs["smart_validation"] = smart_issues
+    frame.attrs["smart_validation"] = smart_issues.to_dict("records")
     frame.attrs["quality_top3"] = top3(smart_issues)
+    frame.attrs["all_periods"] = all_periods if blocks else frame.to_dict("records")
+    frame.attrs["unit_warnings"] = list(dict.fromkeys(w for b in blocks for w in b.attrs.get("unit_warnings", [])))
+    frame.attrs["blocks"] = [{"区块": i+1, "行数": len(b[[c for c in ("来源行",) if c in b]].drop_duplicates()), "状态": "参与分析" if not b.empty and b.iloc[0]["表类型"] == "主表" else "排除：细分口径，避免重复计数"} for i,b in enumerate(blocks)]
     frame.attrs["source_info"] = {"主数据源": source_sheet, "忽略其他Sheet数": len(names) - 1,
                                   "识别区块数": len(blocks), "排除细分区块数": ignored_blocks}
     return frame

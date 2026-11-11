@@ -230,13 +230,24 @@ div[data-testid="stMarkdownContainer"] .irds-home-title { color: #0f766e !import
 """
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
+from src.utils.helpers import detail_frame
+from src.alerts.pipeline import evaluate_frame
+from src.dashboard.export import display_frame, build_report_xlsx, build_report_html, metric_explanations
+from src.dashboard.region_map import render_region_map
+from src.config.threshold_store import save_user_thresholds, reset_thresholds
+
 # 数据加载层（缓存）
 @st.cache_data
 def load_demo_dataset() -> pd.DataFrame:
     path = _PROJECT_ROOT / "data" / "sample" / "demo_dataset.xlsx"
     if path.exists():
         from src.parser.excel_loader import read_excel
-        return read_excel(path, sheet_name="完整数据集")
+        df = read_excel(path, sheet_name="完整数据集")
+        # 固定合成变化值，仅用于演示规则，不表示历史实测。
+        df['单均保费_元_月环比'] = [-12.0 if i % 5 == 0 else 0.0 for i in range(len(df))]
+        df['案均赔款_月同比'] = [25.0 if i % 7 == 0 else 0.0 for i in range(len(df))]
+        df['累计出险频度_月同比'] = [2.0 if i % 7 == 0 else 0.0 for i in range(len(df))]
+        return df
     return pd.DataFrame()
 
 
@@ -246,33 +257,9 @@ def load_uploaded_dataset(uploaded_file, source_sheet=None) -> pd.DataFrame:
 
 
 @st.cache_data
-def df_to_metric_cells(df: pd.DataFrame) -> list:
-    from src.core.models import MetricCell
-    cells = []
-    col_map = {
-        "保费占比": "保费占比", "签单保费_万元": "签单保费",
-        "预期赔付率": "预期赔付率", "成本率1": "成本率1",
-        "预期成本率": "预期成本率", "自主定价系数": "自主定价系数",
-        "单均保费_元": "单均保费", "累计出险频度": "累计出险频度",
-    }
-    for _, row in df.iterrows():
-        if row.get("车型") == "合计":
-            continue
-        branch = row.get("机构", "全辖")
-        vehicle = row.get("车型", "")
-        for col, metric_name in col_map.items():
-            if col in row and pd.notna(row[col]):
-                cells.append(MetricCell(
-                    vehicle_type=str(vehicle), metric_name=metric_name,
-                    value=float(row[col]), time_dimension="当日",
-                    branch=str(branch),
-                ))
-    return cells
-
-
-@st.cache_data
 def get_dataset_stats(df: pd.DataFrame) -> dict:
-    non_summary = df[df["车型"] != "合计"] if "车型" in df.columns else df
+    df = detail_frame(df)
+    non_summary = df
     return {
         "total_records": len(df),
         "branch_count": df["机构"].nunique() if "机构" in df.columns else 0,
@@ -313,7 +300,7 @@ PLOT_TEMPLATE.layout.update(
     margin=dict(t=0, b=0, l=0, r=0),
 )
 
-ALERT_LABELS = {"red": "红色预警", "orange": "橙色预警", "yellow": "黄色预警", "normal": "正常"}
+ALERT_LABELS = {"red": "红色", "orange": "橙色", "yellow": "黄色", "normal": "正常"}
 
 # 侧边栏
 with st.sidebar:
@@ -352,7 +339,7 @@ with st.sidebar:
     )
     data_source = st.radio(
         "选择数据源",
-        ["使用Demo数据集（默认）", "上传Excel文件"],
+        ["使用演示数据集（默认）", "上传Excel文件"],
         label_visibility="collapsed",
     )
 
@@ -361,26 +348,44 @@ with st.sidebar:
         "预期成本率黄色阈值（%）",
         min_value=0.0, max_value=200.0, value=float(thresholds["yellow"]), step=0.5,
         key="yellow_alert_threshold",
-        help="该阈值同时用于预警等级、页面说明和邮件内容；红色/橙色阈值仍以 YAML 为准。",
+        help="黄色、橙色、红色须严格递增；超过阈值才触发。",
     )
-    st.caption(f"规则阈值：黄色 {yellow_threshold:g}% · 橙色 {thresholds['orange']:g}% · 红色 {thresholds['red']:g}%")
+    orange_threshold = st.number_input("预期成本率橙色阈值（%）", min_value=0.0, max_value=200.0, value=float(thresholds["orange"]), step=0.5, key="orange_alert_threshold")
+    red_threshold = st.number_input("预期成本率红色阈值（%）", min_value=0.0, max_value=200.0, value=float(thresholds["red"]), step=0.5, key="red_alert_threshold")
+    if yellow_threshold < orange_threshold < red_threshold:
+        save_user_thresholds(dict(yellow=yellow_threshold, orange=orange_threshold, red=red_threshold))
+    else:
+        st.error("阈值须满足黄色＜橙色＜红色，当前输入未保存。")
+        st.stop()
+    if st.button("恢复默认"):
+        reset_thresholds()
+        for key in ("yellow_alert_threshold", "orange_alert_threshold", "red_alert_threshold"):
+            del st.session_state[key]
+        st.rerun()
+    st.caption("橙色95%为默认参考值，待业务确认。红色严格大于阈值，等于红色阈值不判红。")
 
     st.divider()
     st.markdown(
         '<p style="font-size:0.7rem;color:#555;margin:0;">'
-        '项目演示版 · 脱敏 Demo 数据</p>',
+        '项目演示版 · 脱敏演示数据</p>',
         unsafe_allow_html=True,
     )
 
 
+
+def show_dataframe(data, *args, **kwargs):
+    if isinstance(data, pd.DataFrame): data = display_frame(data)
+    elif hasattr(data, 'data') and isinstance(data.data, pd.DataFrame): data = display_frame(data.data)
+    return st.dataframe(data, *args, **kwargs)
+
 # 通用数据加载
 def get_usable_data() -> tuple[pd.DataFrame, str]:
-    if data_source == "使用Demo数据集（默认）":
+    if data_source == "使用演示数据集（默认）":
         df = load_demo_dataset()
         if df.empty:
             st.error("未找到默认演示数据，请检查 data/sample/demo_dataset.xlsx。")
             return pd.DataFrame(), ""
-        return apply_alert_rules(df, st.session_state.get("yellow_alert_threshold")), "默认演示数据"
+        return evaluate_frame(df, st.session_state.get("yellow_alert_threshold")), "默认演示数据"
     else:
         uploaded = st.sidebar.file_uploader(
             "上传 Excel 或 CSV 文件", type=["xlsx", "csv"], key="main_upload",
@@ -399,6 +404,11 @@ def get_usable_data() -> tuple[pd.DataFrame, str]:
                 st.sidebar.error("数据处理异常，请联系维护人员查看程序日志。")
                 return pd.DataFrame(), ""
             if not df.empty:
+                for warning in df.attrs.get("unit_warnings", []):
+                    st.sidebar.warning(warning)
+                if df.attrs.get("blocks"):
+                    st.sidebar.dataframe(pd.DataFrame(df.attrs["blocks"]), hide_index=True)
+                st.sidebar.caption("当日、当年及同比环比均已保留供规则计算；明细默认展示优先绝对期间。其他工作表未参与当前分析。")
                 info = df.attrs.get("source_info", {})
                 st.sidebar.caption(f"主数据源：{info.get('主数据源', '')}；忽略其他Sheet {info.get('忽略其他Sheet数', 0)} 张；排除细分区块 {info.get('排除细分区块数', 0)} 个。")
                 if "统计日期" in df and df["统计日期"].notna().any():
@@ -414,7 +424,7 @@ def get_usable_data() -> tuple[pd.DataFrame, str]:
                     else:
                         st.sidebar.warning(f"上传数据契约：{status}")
                     st.sidebar.caption(message)
-                return apply_alert_rules(df, st.session_state.get("yellow_alert_threshold")), f"上传文件：{uploaded.name}"
+                return evaluate_frame(df, st.session_state.get("yellow_alert_threshold")), f"上传文件：{uploaded.name}"
         return pd.DataFrame(), ""
 
 
@@ -515,6 +525,15 @@ def render_home():
 
     st.divider()
 
+    if not df.empty:
+        from src.rules.rule_engine import load_alert_rules
+        st.caption(f"已启用规则 {sum(r.get('enabled', True) for r in load_alert_rules())} 条；触发情况见预警中心及报告规则明细。演示同比环比为合成参考值。")
+        render_region_map(df)
+        st.download_button("一键导出", build_report_xlsx(df, checks=validation_summary(df)), "车险风控报告.xlsx")
+        st.download_button("打印版", build_report_html(df, checks=validation_summary(df)), "车险风控报告.html", mime="text/html")
+    with st.expander("指标与阈值说明"):
+        show_dataframe(metric_explanations(), hide_index=True)
+
     # ---- 演示引导（新用户快速上手） ----
     with st.expander("演示引导 — 点击展开查看系统使用流程"):
         st.markdown("""
@@ -536,41 +555,11 @@ def render_home():
         - 支持模拟发送和 SMTP 邮件发送
         """)
 
-    # ---- 项目介绍 ----
-    col_left, col_right = st.columns([3, 2])
-    with col_left:
-        st.markdown("""
-        ### 系统说明
-
-        系统面向车险经营管理场景，将 Excel 监控报表接入平台，经过指标计算和规则判断形成预警，再通过归因分析解释异常原因，并生成通知内容。
-
-        | 功能 | 说明 |
-        |---|---|
-        | 数据解析 | 自动识别多类监控报表，保留原始记录和解析状态 |
-        | 指标计算 | 计算预期成本率、出险频度等核心指标 |
-        | 规则预警 | 根据可配置阈值自动生成预警等级 |
-        | 归因分析 | 展示原始数据、触发条件、归因结论和整改建议 |
-        | 通知分发 | 生成邮件预览，收件人和抄送可在前端修改 |
-        """)
-
-    with col_right:
-        st.markdown("### 核心公式")
-        st.latex(r"\text{Expected Cost Ratio} = \text{Expected Loss Ratio} + \text{Cost Ratio 1}")
-        st.latex(r"\text{Claim Frequency} = \frac{\text{Resolved Claims (incl. RBNR)}}{\text{Policies In Force}}")
-        st.latex(r"\text{Avg Premium} = \frac{\text{Signed Premium}}{\text{Policies In Force}}")
-        st.latex(r"\text{Premium Share} = \frac{\text{Vehicle-type Signed Premium}}{\text{Total Signed Premium}}")
-
-        st.markdown("### 预警阈值")
-        threshold = st.session_state.get("yellow_alert_threshold", configured_thresholds()["yellow"])
-        configured = configured_thresholds()
-        st.markdown(f"""
-        | Level | Expected Cost Ratio |
-        |---|---|
-        | <span style="color:#4ade80;">Normal</span> | ≤ {threshold:g}% |
-        | <span style="color:#fbbf24;">Yellow</span> | &gt; {threshold:g}% |
-        | <span style="color:#fb923c;">Orange</span> | {configured['orange']:g}%（当前 YAML 未启用独立橙色规则） |
-        | <span style="color:#f87171;">Red</span> | &gt; {configured['red']:g}% |
-        """, unsafe_allow_html=True)
+    with st.expander("系统说明与核心公式"):
+        st.markdown("ECR（预期成本率）＝ELR（预期赔付率）＋CR1（成本率1）")
+        st.markdown("CF（出险频度）＝〔已决案件数＋RBNR（已发生未报案案件数）〕÷承保件数")
+        st.markdown("AP（单均保费）＝签单保费÷承保件数；PS（保费占比）＝车型签单保费÷总签单保费")
+        st.caption("阈值作用：识别成本、同比及环比风险，组合条件成立时升级。红色采用严格大于边界。")
 
 
 # 页面2: 核心指标表
@@ -596,7 +585,7 @@ def render_metrics_table():
         sel_branch = st.selectbox("机构", branches)
     with col_filter2:
         levels = ["全部"] + sorted(df["预警等级"].unique().tolist())
-        sel_level = st.selectbox("预警等级", levels)
+        sel_level = st.selectbox("预警等级", levels, format_func=lambda x: ALERT_LABELS.get(x, x))
     with col_filter3:
         search = st.text_input("车型搜索", placeholder="输入车型关键词...")
 
@@ -622,28 +611,29 @@ def render_metrics_table():
 
     display_cols = [
         "机构", "车型", "保费占比", "预期赔付率", "成本率1",
-        "预期成本率", "累计出险频度", "单均保费_元", "预警等级",
+        "预期成本率", "累计出险频度", "单均保费_元", "预警等级", "触发规则", "规则类型",
     ]
     available_cols = [c for c in display_cols if c in view.columns]
     styled = view[available_cols].style.apply(highlight_rows, axis=1)
-    st.dataframe(styled, use_container_width=True, height=500)
+    show_dataframe(styled, use_container_width=True, height=500)
 
     with st.expander("数据质量校验"):
         tolerance = st.number_input("保费占比容忍误差（百分点）", 0.0, 10.0, 1.0, 0.1, key="premium_tolerance")
         from src.validation.schema import validate_frame, top3
         smart_issues=df.attrs.get('smart_validation')
+        if isinstance(smart_issues, list): smart_issues=pd.DataFrame(smart_issues, columns=["sheet","row","column","rule_id","severity","message"])
         if smart_issues is None: smart_issues=validate_frame(df,'主数据')
-        st.write('问题 TOP3',top3(smart_issues))
-        with st.expander('智能校验明细'): st.dataframe(smart_issues,hide_index=True)
+        st.write('主要三项问题',top3(smart_issues))
+        with st.expander('智能校验明细'): show_dataframe(smart_issues,hide_index=True)
         checks = validation_summary(df, tolerance)
         if checks.empty:
             st.info("当前单表没有可展示的 DQ001 结果；DQ003 默认关闭，DQ002 需同时提供 T2 与 T7。")
         else:
-            st.dataframe(checks, use_container_width=True, hide_index=True)
+            show_dataframe(checks, use_container_width=True, hide_index=True)
             details = quality_details(df, checks)
             if not details.empty:
                 st.markdown("**异常机构参与求和的原始明细**")
-                st.dataframe(details, use_container_width=True, hide_index=True)
+                show_dataframe(details, use_container_width=True, hide_index=True)
                 st.download_button("下载校验异常明细", details.to_csv(index=False).encode("utf-8-sig"), "数据质量异常.csv", "text/csv")
         st.caption("DQ001 只汇总主表明细，不重复加入细分表或合计行；±1个百分点暂为参考设置。DQ002 只在同时具备 T2 与 T7 时执行。")
 
@@ -695,7 +685,7 @@ def render_alert_center():
 
     display_cols = [
         "机构", "车型", "预期赔付率", "成本率1", "预期成本率",
-        "累计出险频度", "单均保费_元", "预警等级",
+        "累计出险频度", "单均保费_元", "预警等级", "触发规则", "规则类型",
     ]
     available_cols = [c for c in display_cols if c in alert_df.columns]
 
@@ -710,8 +700,16 @@ def render_alert_center():
         return [""] * len(row.index)
 
     st.markdown('<div class="ds-section-title">预警明细</div>', unsafe_allow_html=True)
+    with st.expander("统计异常参考（不改变业务预警等级）"):
+        from src.monitoring.anomaly import score_anomalies
+        reference = df.drop_duplicates(['机构','车型'])
+        try:
+            scored = score_anomalies(reference, ['预期成本率'])
+            show_dataframe(scored.rename(columns={'anomaly_score':'异常强度','top_metric':'主要敏感指标','top_metric_contribution':'分数变化','metric_explanation':'解释'}), hide_index=True)
+        except ValueError as exc:
+            st.info(f"本次无法执行统计异常分析：{exc}")
     styled = alert_df[available_cols].style.apply(highlight_alert_rows, axis=1)
-    st.dataframe(styled, use_container_width=True, height=400)
+    show_dataframe(styled, use_container_width=True, height=400)
 
     from src.dashboard.batch_panel import render_batch_panel
     render_batch_panel(alert_df, yellow_threshold)
@@ -759,12 +757,12 @@ def render_alert_center():
     st.divider()
     st.markdown('<div class="ds-section-title">重点机构与车型风险明细</div>', unsafe_allow_html=True)
     focus_cols = [
-        "机构", "车型", "预期成本率", "预期赔付率", "成本率1", "预警等级",
+        "机构", "车型", "预期成本率", "预期赔付率", "成本率1", "预警等级", "触发规则", "规则类型",
     ]
     focus_view = alert_df[alert_df["车型"] != "合计"].copy()
     focus_view = focus_view.sort_values("预期成本率", ascending=False)
     focus_view = focus_view[[c for c in focus_cols if c in focus_view.columns]].head(15)
-    st.dataframe(focus_view, use_container_width=True, hide_index=True, height=430)
+    show_dataframe(focus_view, use_container_width=True, hide_index=True, height=430)
     st.caption("按预期成本率从高到低展示重点机构与车型组合，便于在黑白打印和小屏录制中核对。")
 
     st.caption(f"数据来源：{source_label}")
@@ -844,7 +842,7 @@ def render_attribution():
     from src.attribution.evidence import condition_evidence
     st.subheader("原始输入数据")
     st.caption(f"来源：{source_label}；以下为当前加载表的完整记录，非保单原件。预警等级由当前规则引擎重新计算。")
-    st.dataframe(selected.to_frame().T, use_container_width=True, hide_index=True)
+    show_dataframe(selected.to_frame().T, use_container_width=True, hide_index=True)
     st.download_button("下载当前记录 CSV", selected.to_frame().T.to_csv(index=False).encode("utf-8-sig"),
                        file_name="attribution_input.csv", mime="text/csv")
     st.subheader("触发条件与归因依据")
@@ -856,7 +854,7 @@ def render_attribution():
             evidence.pop("matched")
             evidence_rows.append({"规则": rule["id"], **evidence})
     if evidence_rows:
-        st.dataframe(pd.DataFrame(evidence_rows), use_container_width=True, hide_index=True)
+        show_dataframe(pd.DataFrame(evidence_rows), use_container_width=True, hide_index=True)
     else:
         st.info("该车型尚无专属归因条件。")
     st.caption("规则内全部条件满足才生成专属结论；缺少维度或比较基准时标为无法判断。成本占比说明构成，不代表异常变化的因果贡献。")
@@ -916,7 +914,7 @@ def render_attribution():
                 "说明": item.description,
                 "主因": "🔴" if item.is_primary else "",
             })
-        st.dataframe(pd.DataFrame(items_data), use_container_width=True, hide_index=True)
+        show_dataframe(pd.DataFrame(items_data), use_container_width=True, hide_index=True)
 
         # 贡献度柱状图
         st.markdown('<div class="ds-section-title">成本构成占比</div>', unsafe_allow_html=True)
@@ -1079,7 +1077,7 @@ def render_upload_and_sheets():
             if uploaded.name.lower().endswith(".csv"):
                 st.info("CSV 为单表输入，仅上传单表时，不触发跨表一致性校验。")
                 try:
-                    st.dataframe(read_uploaded_data(uploaded), hide_index=True, use_container_width=True)
+                    show_dataframe(read_uploaded_data(uploaded), hide_index=True, use_container_width=True)
                 except ValueError as exc:
                     st.error(str(exc))
                 return
@@ -1098,7 +1096,7 @@ def render_upload_and_sheets():
         st.divider()
         st.markdown('<div class="ds-section-title">支持的报表类型（9 类）</div>', unsafe_allow_html=True)
 
-        st.dataframe(
+        show_dataframe(
             pd.DataFrame(sheet_info, columns=["编号", "报表名称", "时间口径", "解析状态"]),
             use_container_width=True, hide_index=True,
         )
@@ -1107,7 +1105,7 @@ def render_upload_and_sheets():
     if wb is None:
         st.info("请上传 Excel 文件以开始分析。")
         st.divider()
-        st.dataframe(
+        show_dataframe(
             pd.DataFrame(sheet_info, columns=["编号", "报表名称", "时间口径", "解析状态"]),
             use_container_width=True, hide_index=True,
         )
@@ -1133,19 +1131,19 @@ def render_upload_and_sheets():
             "可解析": "是" if meta.is_parseable else "部分",
             "说明": meta.parse_note,
         })
-    st.dataframe(pd.DataFrame(overview_data), use_container_width=True, hide_index=True)
+    show_dataframe(pd.DataFrame(overview_data), use_container_width=True, hide_index=True)
 
-    st.markdown('<div class="ds-section-title">跨表数据质量校验 / Cross-report Check</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ds-section-title">跨表数据质量校验 / 跨表校验</div>', unsafe_allow_html=True)
     inputs, dq002_result = run_dq002(wb)
     if inputs.ready:
         from src.validation.cross_report import cross_report_issues
         from src.validation.schema import top3
         cross_issues=cross_report_issues(inputs.t2,inputs.t7)
-        st.write('跨表问题 TOP3',top3(cross_issues))
-        with st.expander('跨表问题定位'): st.dataframe(cross_issues,hide_index=True)
+        st.write('跨表主要三项问题',top3(cross_issues))
+        with st.expander('跨表问题定位'): show_dataframe(cross_issues,hide_index=True)
     if inputs.ready:
         st.caption("DQ002：只比较 T2 的“签单保费-当月”与 T7 的“月签单保费”；抽取不到这两个明确时间口径时不会臆造结论。")
-        st.dataframe(dq002_result, use_container_width=True, hide_index=True)
+        show_dataframe(dq002_result, use_container_width=True, hide_index=True)
     else:
         st.info("仅上传单表时，不触发跨表一致性校验。DQ002 需要同口径的 T2 当月签单保费和 T7 月签单保费。")
     for note in inputs.notes:
@@ -1154,7 +1152,7 @@ def render_upload_and_sheets():
     st.markdown('<div class="ds-section-title">报表详情</div>', unsafe_allow_html=True)
     for meta in sheet_metas:
         status_icon = "✓" if meta.is_parseable else "○"
-        with st.expander(f"{status_icon} {meta.sheet_name} ({meta.row_count} rows x {meta.col_count} cols)"):
+        with st.expander(f"{status_icon} {meta.sheet_name} ({meta.row_count} 行 × {meta.col_count} 列)"):
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**报表类型**：{meta.report_type.value}")
@@ -1172,14 +1170,14 @@ def render_upload_and_sheets():
                 for number, block in enumerate(blocks, 1):
                     if not block.empty:
                         st.markdown(f"**区块 {number} · {block.iloc[0]['表类型']}**")
-                        st.dataframe(block, hide_index=True, use_container_width=True)
+                        show_dataframe(block, hide_index=True, use_container_width=True)
             # 非 T1/T2 表不强行套用核心指标规则，但允许用户查看前几行，
             # 这样“结构识别”和“可用数据预览”是两个清晰边界。
             if meta.report_type.value not in ("T1", "T2"):
                 from src.parser.excel_loader import read_excel
                 preview = read_excel(uploaded, sheet_name=meta.sheet_name, header=None, nrows=12)
                 st.caption("该报表当前为结构识别模式，以下为原始前 12 行预览。")
-                st.dataframe(preview, use_container_width=True, hide_index=True)
+                show_dataframe(preview, use_container_width=True, hide_index=True)
 
 
 # 预警通知中心
@@ -1188,10 +1186,10 @@ def render_notification_center():
     from src.notification.channels import dispatch
     import time
 
+    df, source_label = get_usable_data()
     with st.expander("本地推送与处置闭环"):
-        df, _ = get_usable_data()
-        batch = st.text_input("推送批次", "manual")
-        if st.button("生成多渠道 dry-run outbox"):
+        batch = st.text_input("推送批次", "手工批次")
+        if st.button("生成多渠道 模拟推送记录（不真实发送）"):
             alerts = [
                 {"branch": r.get("机构", "全辖"), "batch": batch, "object": r.get("车型", ""), "level": r["预警等级"]}
                 for _, r in df.iterrows()
@@ -1226,7 +1224,7 @@ def render_notification_center():
     # SMTP 状态（提前定义，f-string 要用）
     from src.notification.email_sender import is_smtp_available
 
-    smtp_available = is_smtp_available()
+    smtp_available = False
     mode_badge = (
         '<span style="display:inline-block;background:rgba(74,222,128,0.12);color:#4ade80;'
         "border:1px solid rgba(74,222,128,0.2);border-radius:6px;padding:2px 10px;"
@@ -1246,7 +1244,6 @@ def render_notification_center():
         unsafe_allow_html=True,
     )
 
-    df, source_label = get_usable_data()
     if df.empty:
         st.warning("请选择数据来源。")
         return
@@ -1356,6 +1353,7 @@ def render_notification_center():
         html_body = generate_html_body(
             selected,
             context=ctx,
+                    
             attribution_summary=attribution_summary,
             suggestions=suggestions,
             threshold=yellow_threshold,
@@ -1428,18 +1426,19 @@ def render_notification_center():
                     to_list=edited_to,
                     cc_list=edited_cc,
                     context=ctx,
+                    dry_run=True,
                 )
             if record.status == "success":
-                st.success(f"邮件发送成功！({record.mode.upper()})")
+                st.success(f"邮件发送成功！(模拟)")
                 st.markdown(f"""
                 **发送编号**：`{record.send_id}`
                 **时间**：{record.timestamp}
                 **收件人**：{", ".join(record.recipients)}
-                **模式**：{record.mode.upper()}
+                **模式**：模拟
                 **状态**：成功
                 """)
             else:
-                st.error(f"Send failed ({record.mode.upper()}): {record.error_message}")
+                st.error(f"发送失败 (模拟): {record.error_message}")
 
         if st.button("清空发送记录", use_container_width=True):
             clear_send_history()
@@ -1456,13 +1455,13 @@ def render_notification_center():
                 {
                     "发送编号": h.send_id,
                     "时间": h.timestamp,
-                    "模式": h.mode.upper(),
+                    "模式": "模拟" if h.mode == "mock" else "邮件服务",
                     "主题": h.subject[:60] + ("..." if len(h.subject) > 60 else ""),
                     "收件人数": len(h.recipients),
                     "状态": "成功" if h.status == "success" else f"失败：{h.error_message}",
                 }
             )
-        st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
+        show_dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
     else:
         st.info("暂无发送记录。选择预警并填写收件邮箱后即可生成模拟发送记录。")
 
@@ -1513,7 +1512,7 @@ def render_ai_advisor():
         format_func=lambda i: f"{alerts.iloc[i]['机构']} | {alerts.iloc[i]['车型']}",
     )
     context = build_alert_context(alerts.iloc[idx].to_dict(), configured_thresholds(), source_label=source_label)
-    st.dataframe(pd.DataFrame(context.items(), columns=["系统依据", "值"]), hide_index=True)
+    show_dataframe(pd.DataFrame(context.items(), columns=["系统依据", "值"]), hide_index=True)
 
     def show_meta(meta):
         with st.expander("引用的知识片段"):

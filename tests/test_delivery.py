@@ -82,10 +82,11 @@ class EvidenceTests(unittest.TestCase):
         metrics = [MetricCell("家用车", "单均保费", -11, "当日", "湖北")]
         self.assertEqual(evaluate_rule(rule, metrics), [])
 
-    def test_preconditions_must_all_be_available(self):
+    def test_preconditions_any_available(self):
         rule = {"id": "TEST", "metric": "出险频度", "operator": "change_gt",
                 "threshold": 1, "unit": "point", "level": "yellow",
                 "change_dimension": "月同比", "enabled": True,
+                "precondition_logic": "any",
                 "preconditions": [
                     {"metric": "满期保费", "operator": "gt", "value": 100},
                     {"metric": "满期进度", "operator": "gt", "value": 2},
@@ -94,7 +95,7 @@ class EvidenceTests(unittest.TestCase):
             MetricCell("家用车", "累计出险频度", 2, "月同比", "湖北"),
             MetricCell("家用车", "满期保费", 101, "当月", "湖北"),
         ]
-        self.assertEqual(evaluate_rule(rule, metrics), [])
+        self.assertEqual(len(evaluate_rule(rule, metrics)), 1)
         metrics.append(MetricCell("家用车", "满期进度", 3, "当月", "湖北"))
         self.assertEqual(len(evaluate_rule(rule, metrics)), 1)
 
