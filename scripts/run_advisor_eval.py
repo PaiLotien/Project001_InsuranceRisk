@@ -77,6 +77,7 @@ def main():
         # 与线上一致：假设分析由 Python 算好后放进系统结果，可被引用
         sys_ctx = hypothesis_context(it["question"], ctx)
         evidence_text = json.dumps(sys_ctx, ensure_ascii=False) if sys_ctx else ""
+        evidence_text += " " + " ".join(f["label"] + f["value"] for f in r.get("lookup", []))
         chunks = {c["source"] + c["section"] + c["text"] for c in idx.chunks}
         pool = (
             evidence_text
@@ -101,6 +102,8 @@ def main():
             "refused": refused,
             "refusal_ok": (refused == it["should_refuse"]) if it["json"] else None,
             "invalid_citations": r["invalid_citations"],
+            "lookup": r.get("lookup", []),
+            "lookup_mismatch": r.get("lookup_mismatch", []),
             "has_citation": bool(r["citations"]),
             "untraced_numbers": untraced,
             "correct": None,
@@ -148,6 +151,8 @@ def main():
         "correct": rate("correct"),
         "correct_old_Q01_Q24": f"{sum(r['correct'] for r in old)}/{len(old)}",
         "correct_new_Q25plus": f"{sum(r['correct'] for r in new)}/{len(new)}",
+        "lookup_used": sum(bool(r["lookup"]) for r in rows),
+        "lookup_mismatch_answers": sum(bool(r["lookup_mismatch"]) for r in rows),
         "cached_answers": sum(bool(r["cached"]) for r in rows),
         "ttft_median_s": pct(ft, 0.5),
         "total_median_s": pct(tt, 0.5),

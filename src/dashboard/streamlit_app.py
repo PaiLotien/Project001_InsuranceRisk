@@ -1279,8 +1279,12 @@ def render_ai_advisor():
                 st.text(hit["text"])
         if meta["invalid_citations"]:
             st.warning("有引用无法对应，请人工核对")
-        if meta["untraced_numbers"]:
-            st.warning("有数字无法溯源，请以系统计算结果为准")
+        if meta.get("lookup"):
+            with st.expander("系统查表结果"):
+                for fact in meta["lookup"]:
+                    st.write(f"{fact['label']}：{fact['value']}（{fact['source']}）")
+        if meta["untraced_numbers"] or meta.get("lookup_mismatch"):
+            st.warning("有数字与系统查表或计算结果不一致，请以系统结果为准")
         timing = meta["timing"]
         label = "缓存命中" if meta.get("cached") else f"首字 {timing.get('ttft_s', '-')} 秒"
         st.caption(f"用时：{timing.get('total_s', '-')} 秒（{label}）；模型：{rag.CHAT_MODEL}")
@@ -1312,7 +1316,7 @@ def render_ai_advisor():
         with st.chat_message("user"):
             st.write(question)
         with st.chat_message("assistant"):
-            iterator, meta = stream_advisor(question, context, history=history)
+            iterator, meta = stream_advisor(question, context, history=history, frame=df)
             answer = st.write_stream(iterator)
             show_meta(meta)
         history.extend([{"role": "user", "content": question}, {"role": "assistant", "content": answer}])

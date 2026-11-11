@@ -22,5 +22,7 @@ keep_alive: 2h
 cache_enabled: true
 # 看板启动时后台预热模型
 warmup_on_start: true
+# 数值 / 事实类问题先查结构化数据（data/official/china、阈值配置、看板当前数据），注入 [系统查表]
+lookup_enabled: true
 history_turns: 2
 local_only: true

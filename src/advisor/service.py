@@ -14,6 +14,12 @@ import numpy as np
 from src.advisor import rag as rc
 from src.advisor.cache import AnswerCache, kb_version, make_key, skill_version
 from src.advisor.context import hypothesis_context
+from src.advisor.lookup import CITE as LOOKUP_CITE, lookup_facts, render_facts
+
+LOOKUP_INSTRUCTION = (
+    "【系统查表】以下数值由系统从结构化数据精确查出。涉及这些指标时必须逐字引用对应数值并标注 [系统查表]，"
+    "不得改写、换算或推算，也不得用知识库片段里其他年份、地区的数值代替；结果为“未查到”时直接说明数据中没有，不要估算。"
+)
 
 JSON_INSTRUCTION = (
     "返回 answer/evidence[{claim,source}]/suggestions/uncertainty/refused，严格遵循 JSON Schema。"
@@ -97,20 +103,50 @@ def _system_prompt() -> str:
     return skill + "\n引用规则：只引用提供的 [K编号] 或 [系统]。假设分析只采用系统计算结果。"
 
 
-def _messages(question, hits, context, history, json_mode):
+def _messages(question, hits, context, history, json_mode, facts=None):
     limit = int(rc.CFG.get("hit_chars", 0) or 0)
     knowledge = "\n".join(f"[{h['cite']}] {h['source']}｜{h['section']}\n{_clip(h['text'], limit)}" for h in hits)
     tail = ("\n" + JSON_INSTRUCTION) if json_mode else ""
+    lookup = f"\n{LOOKUP_INSTRUCTION}\n{render_facts(facts)}" if facts else ""
     return (
         [{"role": "system", "content": _system_prompt()}]
         + (history or [])[-rc.CFG["history_turns"] * 2 :]
         + [
             {
                 "role": "user",
-                "content": f"【知识库片段】\n{knowledge}\n【系统计算结果】{_compact(context)}\n【问题】{question}{tail}",
+                "content": f"【知识库片段】\n{knowledge}\n【系统计算结果】{_compact(context)}{lookup}\n【问题】{question}{tail}",
             }
         ]
     )
+
+
+def _nums(text: str) -> set[float]:
+    text = re.sub(r"\[[^\]]*\]|K\d+|R\d{3}|C\d{3}|DQ\d+", " ", str(text))
+    text = re.sub(r"(?<=\d),(?=\d{3})", "", text)
+    return {round(float(n), 4) for n in re.findall(r"(?<![\d.])\d+(?:\.\d+)?", text)}
+
+
+def lookup_mismatch(raw, facts, question, context) -> list[str]:
+    """查表命中时，回答里的数字必须来自查表结果、系统结果或问题本身；返回不符的数字。
+
+    另外检查查表主值是否被引用：只有一条带数值的事实且回答没有出现该数值时，记为“未引用查表值”。
+    """
+    hits = [f for f in facts or [] if not f["value"].startswith(("未查到", "官方表未列示"))]
+    if not hits:
+        return []
+    allowed = _nums(render_facts(facts)) | _nums(question) | _nums(json.dumps(context or {}, ensure_ascii=False))
+    answer = _nums(raw)
+    ignore = {float(i) for i in range(0, 13)} | {float(y) for y in range(2000, 2031)}  # 序号、月份、年份不计
+    bad = sorted(answer - allowed - ignore)
+    out = [f"{n:g}" for n in bad]
+    # 主值：只有一条事实、且其值在括号说明之前恰好一个数时才检查（如“9409 亿元”）
+    plain = lambda v: re.sub(r"（[^）]*）", "", v)
+    numeric = [f for f in hits if len(_nums(plain(f["value"]))) == 1]
+    if len(numeric) == 1 and len(hits) <= 2:
+        primary = next(iter(_nums(plain(numeric[0]["value"]))))
+        if primary not in answer:
+            out.append(f"未引用查表值 {primary:g}")
+    return out
 
 
 def _cache_version() -> str:
@@ -118,9 +154,10 @@ def _cache_version() -> str:
                     model=rc.CHAT_MODEL, json_mode=False)[1]
 
 
-def _cache_key(question, context, json_mode, k):
+def _cache_key(question, context, json_mode, k, facts=None):
     model = CALL_OPTIONS.get().get("model") or rc.CHAT_MODEL
-    extra = {"k": k or rc.CFG["top_k"], "hit_chars": rc.CFG.get("hit_chars"), "num_predict": rc.CFG["num_predict"]}
+    extra = {"k": k or rc.CFG["top_k"], "hit_chars": rc.CFG.get("hit_chars"), "num_predict": rc.CFG["num_predict"],
+             "lookup": facts or []}
     return make_key(question, context, kb=kb_version(rc.INDEX_DIR), skill=skill_version(rc.SKILLS_DIR),
                     model=model, json_mode=json_mode, extra=extra)
 
@@ -133,13 +170,14 @@ def _transient(exc) -> bool:
     return isinstance(exc, (ConnectionError, urllib.error.URLError, TimeoutError))
 
 
-CACHED_FIELDS = ("raw", "hits", "citations", "invalid_citations", "untraced_numbers", "json")
+CACHED_FIELDS = ("raw", "hits", "citations", "invalid_citations", "untraced_numbers", "json", "lookup", "lookup_mismatch")
 
 
 def _finish(meta, raw, context, question, start, json_mode):
     meta["raw"] = raw
-    valid = {h["cite"] for h in meta["hits"]} | {"系统"}
-    cited = set(re.findall(r"\[(K\d+|系统)\]", raw))
+    facts = meta.get("lookup") or []
+    valid = {h["cite"] for h in meta["hits"]} | {"系统"} | ({LOOKUP_CITE} if facts else set())
+    cited = set(re.findall(r"\[(K\d+|系统查表|系统)\]", raw))
     if json_mode:
         data = json.loads(raw)
         for key in rc.ANSWER_SCHEMA["required"]:
@@ -165,13 +203,15 @@ def _finish(meta, raw, context, question, start, json_mode):
     meta["invalid_citations"] = sorted(cited - valid)
     pool = question + " " + json.dumps(context, ensure_ascii=False) + " " + " ".join(h["text"] for h in meta["hits"])
     numbers = lambda s: set(re.findall(r"(?<![\w])[-+]?\d+(?:\.\d+)?", re.sub(r"K\d+", "", s)))
+    pool += " " + render_facts(facts)
     meta["untraced_numbers"] = sorted(numbers(raw) - numbers(pool))
+    meta["lookup_mismatch"] = lookup_mismatch(raw, facts, question, context)
     meta["timing"]["total_s"] = round(time.perf_counter() - start, 3)
 
 
-def _stream(question, context=None, *, history=None, k=None, json_mode=False, use_cache=None):
+def _stream(question, context=None, *, history=None, k=None, json_mode=False, use_cache=None, frame=None):
     meta = {"raw": "", "hits": [], "citations": [], "invalid_citations": [], "untraced_numbers": [], "timing": {},
-            "cached": False}
+            "cached": False, "lookup": [], "lookup_mismatch": []}
     if use_cache is None:
         use_cache = bool(rc.CFG.get("cache_enabled", True)) and not history
 
@@ -183,10 +223,13 @@ def _stream(question, context=None, *, history=None, k=None, json_mode=False, us
         try:
             if rc.CFG["local_only"]:
                 rc.enforce_local_only()
+            if rc.CFG.get("lookup_enabled", True):
+                found = lookup_facts(question, ctx, frame)
+                meta["lookup"], meta["lookup_no_hit"] = found["facts"], found["no_hit"]
             if use_cache:
                 try:
                     cache = AnswerCache()
-                    key, version = _cache_key(question, ctx, json_mode, k)
+                    key, version = _cache_key(question, ctx, json_mode, k, meta["lookup"])
                     hit = cache.get(key)
                 except Exception:
                     cache, hit = None, None
@@ -202,7 +245,7 @@ def _stream(question, context=None, *, history=None, k=None, json_mode=False, us
             except FileNotFoundError:
                 meta["index_warning"] = "知识库尚未构建，仅依据系统结果"
             meta["timing"]["retrieval_s"] = round(time.perf_counter() - start, 3)
-            messages = _messages(question, meta["hits"], ctx, history, json_mode)
+            messages = _messages(question, meta["hits"], ctx, history, json_mode, meta["lookup"])
             call = dict(
                 fmt=rc.ANSWER_SCHEMA if json_mode else None,
                 temperature=rc.CFG["temperature"],
@@ -231,7 +274,8 @@ def _stream(question, context=None, *, history=None, k=None, json_mode=False, us
                         raise
                     meta["timing"]["retried"] = True
             _finish(meta, "".join(pieces), ctx, question, start, json_mode)
-            if cache is not None and key and not meta["invalid_citations"] and not meta["untraced_numbers"]:
+            if (cache is not None and key and not meta["invalid_citations"] and not meta["untraced_numbers"]
+                    and not meta["lookup_mismatch"]):
                 try:
                     cache.put(key, version, question, {f: meta[f] for f in CACHED_FIELDS if f in meta})
                 except Exception:
@@ -246,12 +290,13 @@ def _stream(question, context=None, *, history=None, k=None, json_mode=False, us
     return generate(), meta
 
 
-def stream_advisor(question, context=None, *, history=None):
-    return _stream(question, context, history=history)
+def stream_advisor(question, context=None, *, history=None, frame=None):
+    return _stream(question, context, history=history, frame=frame)
 
 
-def ask_advisor(question, context=None, *, json_mode=False, history=None, k=None, use_cache=None):
-    iterator, meta = _stream(question, context, history=history, k=k, json_mode=json_mode, use_cache=use_cache)
+def ask_advisor(question, context=None, *, json_mode=False, history=None, k=None, use_cache=None, frame=None):
+    iterator, meta = _stream(question, context, history=history, k=k, json_mode=json_mode, use_cache=use_cache,
+                             frame=frame)
     for _ in iterator:
         pass
     return meta
