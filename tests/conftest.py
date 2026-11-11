@@ -4,3 +4,8 @@ import pytest
 @pytest.fixture(autouse=True)
 def isolated_threshold_store(tmp_path, monkeypatch):
     monkeypatch.setattr('src.config.threshold_store.DB_PATH', tmp_path/'irds.db')
+
+
+@pytest.fixture(autouse=True)
+def isolated_advisor_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr('src.advisor.cache.DB_PATH', tmp_path/'advisor_cache.db')

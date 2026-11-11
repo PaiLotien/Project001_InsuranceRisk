@@ -1,0 +1,28 @@
+{
+  "generated": 469,
+  "after_dedupe": 466,
+  "paraphrased": 100,
+  "train": 418,
+  "val": 48,
+  "train_files": [
+    "train.jsonl",
+    "train-01.jsonl"
+  ],
+  "val_files": [
+    "val.jsonl"
+  ],
+  "by_category": {
+    "不自算": 24,
+    "判级解释": 29,
+    "口径": 37,
+    "拒答": 40,
+    "无依据": 15,
+    "校验": 28,
+    "知识文档": 39,
+    "行业对标": 159,
+    "规则": 36,
+    "预警解释": 59
+  },
+  "json_mode": 119,
+  "refused": 28
+}

@@ -4,12 +4,23 @@ embed_model: bge-m3-local
 knowledge_dir: knowledge
 index_dir: knowledge_index
 skills_dir: skills
-top_k: 5
+top_k: 4
 chunk_chars: 600
 chunk_overlap: 80
 min_cos: 0.35
+# 每个检索片段送入模型的最大字符数（0 = 不截断）；片段越短，CPU 预填充越快
+hit_chars: 600
 temperature: 0.1
-num_ctx: 8192
-num_predict: 600
+# 提示词约 1.5k–2.5k token，4096 足够；上下文越小，KV 缓存与预填充越省
+num_ctx: 4096
+num_predict: 450
+# CPU 线程数；留空则用全部核心（Ollama 模型默认只用 4 线程）
+num_thread: 8
+# 模型常驻内存时长，避免每次提问重新加载
+keep_alive: 2h
+# 本地答案缓存（data/runtime/advisor_cache.db）；知识库、Skill、模型或系统数据变化自动失效
+cache_enabled: true
+# 看板启动时后台预热模型
+warmup_on_start: true
 history_turns: 2
 local_only: true

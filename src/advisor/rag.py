@@ -84,7 +84,8 @@ def _post(path: str, body: dict, timeout: int = 300):
 def embed(texts: list[str], model: str = EMBED_MODEL, batch: int = 16) -> np.ndarray:
     out: list[list[float]] = []
     for i in range(0, len(texts), batch):
-        with _post("/api/embed", {"model": model, "input": texts[i : i + batch], "truncate": True}) as r:
+        body = {"model": model, "input": texts[i : i + batch], "truncate": True, "keep_alive": CFG.get("keep_alive", "30m")}
+        with _post("/api/embed", body) as r:
             out.extend(json.load(r)["embeddings"])
     arr = np.asarray(out, dtype=np.float32)
     arr /= np.linalg.norm(arr, axis=1, keepdims=True) + 1e-12
@@ -100,6 +101,7 @@ def chat_stream(
     num_predict: int = 600,
     num_ctx: int = 8192,
     timeout: int = 600,
+    num_thread: int | None = None,
 ) -> Iterator[dict]:
     """流式调用 /api/chat，逐块 yield Ollama 返回的 JSON 行。fmt 可为 JSON Schema。"""
     body: dict[str, Any] = {
@@ -107,9 +109,12 @@ def chat_stream(
         "stream": True,
         "think": False,
         "messages": messages,
-        "keep_alive": "30m",
+        "keep_alive": CFG.get("keep_alive", "30m"),
         "options": {"temperature": temperature, "num_predict": num_predict, "num_ctx": num_ctx},
     }
+    threads = num_thread if num_thread is not None else CFG.get("num_thread") or os.cpu_count()
+    if threads:
+        body["options"]["num_thread"] = int(threads)
     if fmt is not None:
         body["format"] = fmt
     with _post("/api/chat", body, timeout=timeout) as r:
@@ -341,9 +346,11 @@ ANSWER_SCHEMA = {
                 "properties": {"claim": {"type": "string"}, "source": {"type": "string"}},
                 "required": ["claim", "source"],
             },
+            "maxItems": 3,
         },
-        "suggestions": {"type": "array", "items": {"type": "string"}},
-        "uncertainty": {"type": "array", "items": {"type": "string"}},
+        # 条数上限由 Ollama 语法约束强制执行，限制输出长度（CPU 上生成是主要耗时）
+        "suggestions": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+        "uncertainty": {"type": "array", "items": {"type": "string"}, "maxItems": 2},
         "refused": {"type": "boolean"},
     },
     "required": ["answer", "evidence", "suggestions", "uncertainty", "refused"],

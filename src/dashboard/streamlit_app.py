@@ -1226,7 +1226,7 @@ def render_notification_center():
 
 def render_ai_advisor():
     from src.advisor.context import build_alert_context
-    from src.advisor.service import advisor_health, rebuild_index, stream_advisor, ask_advisor
+    from src.advisor.service import advisor_health, rebuild_index, stream_advisor, ask_advisor, cache_stats, clear_cache
     from src.advisor import rag
 
     page_title("AI 风控顾问", "本地模型 · 知识库检索 · 引用溯源 · 数据不出本机")
@@ -1251,6 +1251,11 @@ def render_ai_advisor():
         st.json(health["manifest"], expanded=False)
         st.json(rag.load_skills()[1])
         st.write(sorted(health["manifest"].get("files", {})))
+        stats = cache_stats()
+        st.caption(f"本地答案缓存：{stats['entries']} 条，累计命中 {stats['hits']} 次（知识库、Skill、模型或系统数据变化后自动失效）")
+        if st.button("清空答案缓存"):
+            clear_cache()
+            st.rerun()
     df, source_label = get_usable_data()
     if df.empty:
         st.info("请选择数据源")
@@ -1276,7 +1281,9 @@ def render_ai_advisor():
             st.warning("有引用无法对应，请人工核对")
         if meta["untraced_numbers"]:
             st.warning("有数字无法溯源，请以系统计算结果为准")
-        st.caption(f"用时：{meta['timing']}；模型：{rag.CHAT_MODEL}")
+        timing = meta["timing"]
+        label = "缓存命中" if meta.get("cached") else f"首字 {timing.get('ttft_s', '-')} 秒"
+        st.caption(f"用时：{timing.get('total_s', '-')} 秒（{label}）；模型：{rag.CHAT_MODEL}")
 
     if st.button("生成预警解读"):
         result = ask_advisor("请解释这条预警的原因并给出核查建议", context, json_mode=True)
@@ -1366,6 +1373,14 @@ if data_source == SOURCE_CHINA and page in DETAIL_PAGES:
     render_fn = render_industry
 else:
     render_fn = PAGE_MAP.get(page)
+# 后台预热本地 AI 顾问（每个进程一次；模型常驻，首问不再等加载）
+try:
+    from src.advisor.service import start_warmup
+
+    start_warmup()
+except Exception:
+    pass
+
 if render_fn:
     render_fn()
 

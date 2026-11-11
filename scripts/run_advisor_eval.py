@@ -1,4 +1,8 @@
-"""评测：python eval/run_eval.py [--ids Q01,Q02 | --n 10]  → eval/results_<时间>.jsonl + 汇总"""
+"""评测：python scripts/run_advisor_eval.py [--ids Q01,Q02 | --n 10] [--cache] [--label 名称]
+
+→ eval/results_<时间>.jsonl + 汇总。默认关闭答案缓存以测真实推理时延；--cache 用于测缓存命中。
+“正确”= 要点全覆盖 + JSON 合法 + 拒答判断正确 + 无无法溯源的数字 + 无无效引用。
+"""
 
 from __future__ import annotations
 import argparse, json, re, sys, time
@@ -7,12 +11,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from src.advisor import rag as rc
+from src.advisor.context import hypothesis_context
 from src.advisor.service import ask_advisor
+
+
+USE_CACHE = False
 
 
 def ask(question, **kwargs):
     kwargs.pop("index", None)
-    return ask_advisor(question, **kwargs)
+    return ask_advisor(question, use_cache=USE_CACHE, **kwargs)
+
+
+def pct(values, q):
+    values = sorted(values)
+    if not values:
+        return None
+    pos = (len(values) - 1) * q
+    lo, hi = int(pos), min(int(pos) + 1, len(values) - 1)
+    return round(values[lo] + (values[hi] - values[lo]) * (pos - lo), 2)
 
 
 NUM = re.compile(r"\d+(?:\.\d+)?")
@@ -22,7 +39,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ids")
     ap.add_argument("--n", type=int)
+    ap.add_argument("--cache", action="store_true")
+    ap.add_argument("--label", default="")
     a = ap.parse_args()
+    global USE_CACHE
+    USE_CACHE = a.cache
     audit = rc.enforce_local_only()
     items = [json.loads(l) for l in (ROOT / "eval/advisor_eval_set.jsonl").read_text(encoding="utf-8").splitlines()]
     if a.ids:
@@ -30,7 +51,7 @@ def main():
     if a.n:
         items = items[: a.n]
     idx = rc.KnowledgeIndex()
-    out = ROOT / f"eval/results_{time.strftime('%Y%m%d_%H%M')}.jsonl"
+    out = ROOT / f"eval/results_{time.strftime('%Y%m%d_%H%M')}{('_' + a.label) if a.label else ''}.jsonl"
     rows = []
     for it in items:
         ctx = json.loads((ROOT / it["context"]).read_text(encoding="utf-8")) if it["context"] else None
@@ -44,6 +65,8 @@ def main():
                 + " ".join(e.get("claim", "") for e in j.get("evidence", []))
                 + " "
                 + " ".join(j.get("suggestions", []) + j.get("uncertainty", []))
+                + " "
+                + " ".join(str(e.get("source", "")) for e in j.get("evidence", []))
             )
         else:
             ans_text = ans
@@ -51,7 +74,9 @@ def main():
         src_hit = (it["expect_source"] in hit_text) if it["expect_source"] else None
         kw = [k for k in it["keywords"] if k.lower() in ans_text.lower()]
         # 数字溯源：答案中的数字是否都出现在检索片段/上下文/问题里
-        evidence_text = json.dumps(ctx, ensure_ascii=False) if ctx else ""
+        # 与线上一致：假设分析由 Python 算好后放进系统结果，可被引用
+        sys_ctx = hypothesis_context(it["question"], ctx)
+        evidence_text = json.dumps(sys_ctx, ensure_ascii=False) if sys_ctx else ""
         chunks = {c["source"] + c["section"] + c["text"] for c in idx.chunks}
         pool = (
             evidence_text
@@ -78,15 +103,26 @@ def main():
             "invalid_citations": r["invalid_citations"],
             "has_citation": bool(r["citations"]),
             "untraced_numbers": untraced,
+            "correct": None,
+            "cached": r.get("cached", False),
+            "error": r.get("error"),
             "timing": r["timing"],
             "answer": ans,
             "hits": r["hits"],
         }
+        row["correct"] = bool(
+            row["kw_full"]
+            and row["json_ok"] is not False
+            and row["refusal_ok"] is not False
+            and not untraced
+            and not r["invalid_citations"]
+            and not row["error"]
+        )
         rows.append(row)
         with out.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
         print(
-            f"{it['id']} kw={row['keywords_hit']} ret={src_hit} json={row['json_ok']} refuse_ok={row['refusal_ok']} "
+            f"{it['id']} ok={row['correct']} kw={row['keywords_hit']} ret={src_hit} json={row['json_ok']} refuse_ok={row['refusal_ok']} "
             f"cite={row['has_citation']} bad_cite={row['invalid_citations']} untraced={untraced} t={r['timing']}",
             flush=True,
         )
@@ -96,7 +132,9 @@ def main():
         return f"{sum(bool(x) for x in v)}/{len(v)}"
 
     tt = sorted(r["timing"]["total_s"] for r in rows)
-    ft = sorted(r["timing"]["ttft_s"] for r in rows)
+    ft = sorted(r["timing"].get("ttft_s", r["timing"]["total_s"]) for r in rows)
+    old = [r for r in rows if int(r["id"][1:]) <= 24]
+    new = [r for r in rows if int(r["id"][1:]) > 24]
     ext = [h for h in audit if h not in ("127.0.0.1", "::1", "localhost")]
     summ = {
         "n": len(rows),
@@ -107,9 +145,16 @@ def main():
         "with_citation": rate("has_citation"),
         "invalid_citation_answers": sum(bool(r["invalid_citations"]) for r in rows),
         "answers_with_untraced_numbers": sum(bool(r["untraced_numbers"]) for r in rows),
-        "ttft_median_s": ft[len(ft) // 2],
-        "total_median_s": tt[len(tt) // 2],
+        "correct": rate("correct"),
+        "correct_old_Q01_Q24": f"{sum(r['correct'] for r in old)}/{len(old)}",
+        "correct_new_Q25plus": f"{sum(r['correct'] for r in new)}/{len(new)}",
+        "cached_answers": sum(bool(r["cached"]) for r in rows),
+        "ttft_median_s": pct(ft, 0.5),
+        "total_median_s": pct(tt, 0.5),
+        "total_p90_s": pct(tt, 0.9),
         "total_max_s": tt[-1],
+        "output_tokens_median": pct([r["timing"].get("output_tokens", 0) for r in rows], 0.5),
+        "prompt_tokens_median": pct([r["timing"].get("prompt_tokens", 0) for r in rows], 0.5),
         "external_connections": len(ext),
     }
     print(json.dumps(summ, ensure_ascii=False, indent=1))

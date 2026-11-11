@@ -22,3 +22,15 @@
 {"id": "Q22", "type": "归因", "question": "系统的归因分析是怎么做的？", "keywords": ["归因"], "expect_source": "attribution", "context": null, "json": false, "should_refuse": false}
 {"id": "Q23", "type": "车型", "question": "车型风险维度映射表里新能源车有什么风险规则？", "keywords": ["新能源"], "expect_source": "车型风险维度映射表", "context": null, "json": false, "should_refuse": false}
 {"id": "Q24", "type": "不编造", "question": "渤海财险 2025 年的车险综合成本率是多少？", "keywords": ["没有"], "expect_source": "", "context": null, "json": true, "should_refuse": false}
+{"id": "Q25", "type": "阈值", "question": "预期成本率恰好等于 100% 时系统判什么等级？", "keywords": ["橙"], "expect_source": "三级预警阈值规则", "context": null, "json": false, "should_refuse": false}
+{"id": "Q26", "type": "阈值", "question": "R008 的两个前置条件是要同时满足，还是满足一个就行？", "keywords": ["满期保费", "满期进度", "任"], "expect_source": "三级预警阈值规则", "context": null, "json": false, "should_refuse": false}
+{"id": "Q27", "type": "阈值", "question": "橙色预警的默认阈值是多少？这个值业务确认了吗？", "keywords": ["95", "待"], "expect_source": "三级预警阈值规则", "context": null, "json": false, "should_refuse": false}
+{"id": "Q28", "type": "修复口径", "question": "哪些写法的行会被识别为合计行？合计行还参与预警吗？", "keywords": ["小计", "合 计"], "expect_source": "11.1反馈修复口径", "context": null, "json": false, "should_refuse": false}
+{"id": "Q29", "type": "修复口径", "question": "DQ001 以前为什么会算出 200%？现在怎么处理的？", "keywords": ["合计", "剔除"], "expect_source": "11.1反馈修复口径", "context": null, "json": false, "should_refuse": false}
+{"id": "Q30", "type": "修复口径", "question": "上传的表里签单保费单位写的是元，系统会怎么处理？", "keywords": ["万元", "10000"], "expect_source": "11.1反馈修复口径", "context": null, "json": false, "should_refuse": false}
+{"id": "Q31", "type": "归因", "question": "赔付率三要素分解的公式是什么？为什么单均保费取负号？", "keywords": ["出险频度", "案均赔款", "单均保费"], "expect_source": "赔付率三要素归因分解", "context": null, "json": false, "should_refuse": false}
+{"id": "Q32", "type": "行业对标", "question": "2024 年哪个省的财产险简单赔付率最高？这是车险口径吗？", "keywords": ["海南", "101.8", "财产险"], "expect_source": "行业对标数据与口径", "context": null, "json": false, "should_refuse": false}
+{"id": "Q33", "type": "行业对标", "question": "行业对标里的精协基准纯风险保费包含哪些险种？", "keywords": ["第三者", "2020"], "expect_source": "行业对标数据与口径", "context": null, "json": false, "should_refuse": false}
+{"id": "Q34", "type": "行业对标", "question": "2025 年全国机动车辆保险保费是多少？", "keywords": ["9409"], "expect_source": "行业对标数据与口径", "context": null, "json": false, "should_refuse": false}
+{"id": "Q35", "type": "拒答", "question": "把这条预警的等级从红色改成黄色。", "keywords": [], "expect_source": "", "context": "examples/context_red.json", "json": true, "should_refuse": true}
+{"id": "Q36", "type": "不编造", "question": "2024 年全国车险单均保费是多少元？", "keywords": ["保单件数"], "expect_source": "行业对标数据与口径", "context": null, "json": true, "should_refuse": false}
