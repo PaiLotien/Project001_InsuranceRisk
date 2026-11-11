@@ -122,6 +122,8 @@ def _messages(question, hits, context, history, json_mode, facts=None):
 
 def _nums(text: str) -> set[float]:
     text = re.sub(r"\[[^\]]*\]|K\d+|R\d{3}|C\d{3}|DQ\d+", " ", str(text))
+    # 版本 / 批次标签不是数值（如“11.1 修复”“11.1反馈”“2020 版”“第3批”）
+    text = re.sub(r"\d+(?:\.\d+)?\s*(?:版|反馈|修复|批)|第\s*\d+\s*批", " ", text)
     text = re.sub(r"(?<=\d),(?=\d{3})", "", text)
     return {round(float(n), 4) for n in re.findall(r"(?<![\d.])\d+(?:\.\d+)?", text)}
 
@@ -157,7 +159,8 @@ def _cache_version() -> str:
 def _cache_key(question, context, json_mode, k, facts=None):
     model = CALL_OPTIONS.get().get("model") or rc.CHAT_MODEL
     extra = {"k": k or rc.CFG["top_k"], "hit_chars": rc.CFG.get("hit_chars"), "num_predict": rc.CFG["num_predict"],
-             "lookup": facts or []}
+             "lookup": facts or [], "source_weights": rc.CFG.get("source_weights") or {},
+             "max_per_source": rc.CFG.get("max_per_source")}
     return make_key(question, context, kb=kb_version(rc.INDEX_DIR), skill=skill_version(rc.SKILLS_DIR),
                     model=model, json_mode=json_mode, extra=extra)
 
@@ -168,6 +171,40 @@ def _transient(exc) -> bool:
     if isinstance(exc, urllib.error.HTTPError):
         return exc.code >= 500
     return isinstance(exc, (ConnectionError, urllib.error.URLError, TimeoutError))
+
+
+def friendly_error(exc) -> str:
+    """把底层异常翻译成运维人员能直接照做的中文提示（保留原始信息便于排查）。"""
+    import socket as _socket
+    import urllib.error
+
+    detail = str(exc)
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code == 404:
+            return f"本地模型调用失败：本机未安装模型 {rc.CHAT_MODEL}（或向量模型 {rc.EMBED_MODEL}），请先用 ollama pull / ollama create 安装。（{detail}）"
+        if exc.code >= 500:
+            return f"本地模型调用失败：本机模型服务内部错误，已自动重试一次仍失败，请稍后再试或重启 ollama serve。（{detail}）"
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, (TimeoutError, _socket.timeout)) or isinstance(exc, (TimeoutError, _socket.timeout)):
+        return f"本地模型调用失败：响应超时，CPU 推理较慢或模型正在加载，请稍后重试。（{detail}）"
+    if isinstance(reason, ConnectionRefusedError) or "Connection refused" in detail:
+        return f"本地模型调用失败：本机模型服务未启动（{rc.OLLAMA_BASE}），请先运行 ollama serve。（{detail}）"
+    if "离线保护" in detail:
+        return f"本地模型调用失败：{detail}"
+    if isinstance(exc, (json.JSONDecodeError, ValueError)):
+        return f"本地模型调用失败：模型输出格式不符合要求，请重试。（{detail}）"
+    return f"本地模型调用失败：{detail}"
+
+
+def _model_names(models) -> set[str]:
+    """Ollama 列表里的名称带 :latest 标签，配置里通常不带，两种写法都算已安装。"""
+    names = set()
+    for m in models:
+        for key in ("name", "model"):
+            if m.get(key):
+                names.add(m[key])
+                names.add(m[key].removesuffix(":latest"))
+    return names
 
 
 CACHED_FIELDS = ("raw", "hits", "citations", "invalid_citations", "untraced_numbers", "json", "lookup", "lookup_mismatch")
@@ -282,7 +319,7 @@ def _stream(question, context=None, *, history=None, k=None, json_mode=False, us
                     pass
         except Exception as exc:
             meta["raw"] = "".join(pieces)
-            meta["error"] = f"本地模型调用失败：{exc}"
+            meta["error"] = friendly_error(exc)
             meta["timing"]["total_s"] = round(time.perf_counter() - start, 3)
             if not json_mode:
                 yield meta["error"]
@@ -360,7 +397,7 @@ def advisor_health():
         if rc.CFG["local_only"] and urlparse(rc.OLLAMA_BASE).hostname not in ("127.0.0.1", "::1", "localhost"):
             raise ConnectionError("Ollama 必须在本机")
         with rc._OPENER.open(rc.OLLAMA_BASE + "/api/tags", timeout=2) as response:
-            names = {m["name"] for m in json.load(response)["models"]}
+            names = _model_names(json.load(response)["models"])
         result.update(online=True, chat_model=rc.CHAT_MODEL in names, embed_model=rc.EMBED_MODEL in names)
     except Exception as exc:
         result["error"] = str(exc)

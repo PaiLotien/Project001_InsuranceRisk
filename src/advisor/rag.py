@@ -269,6 +269,18 @@ class BM25:
 # ---------------------------------------------------------------- 索引
 
 
+def source_weight(source: str, weights: dict[str, float]) -> float:
+    """按来源路径子串给融合分数加权：问卷类（只有“我们的理解 + 提问”）降权，口径定义卡片升权。
+
+    多条规则同时命中时取乘积；未命中为 1。
+    """
+    w = 1.0
+    for pattern, factor in (weights or {}).items():
+        if pattern and pattern in source:
+            w *= float(factor)
+    return w
+
+
 class KnowledgeIndex:
     def __init__(self, index_dir: Path = INDEX_DIR):
         self.dir = index_dir
@@ -277,7 +289,16 @@ class KnowledgeIndex:
         self.meta = json.loads((index_dir / "manifest.json").read_text(encoding="utf-8"))
         self.bm25 = BM25([c["section"] + " " + c["text"] for c in self.chunks])
 
-    def search(self, query: str, k: int = 5, *, alpha_rrf: int = 60, min_cos: float = 0.35) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        k: int = 5,
+        *,
+        alpha_rrf: int = 60,
+        min_cos: float = 0.35,
+        source_weights: dict[str, float] | None = None,
+        max_per_source: int | None = None,
+    ) -> list[dict]:
         qv = embed([query], model=self.meta["embed_model"])[0]
         cos = self.vecs @ qv
         lex = self.bm25.scores(query)
@@ -289,11 +310,24 @@ class KnowledgeIndex:
         for rank, i in enumerate(r_lex[:50]):
             if lex[i] > 0:
                 fused[int(i)] = fused.get(int(i), 0) + 1 / (alpha_rrf + rank)
+        weights = (CFG.get("source_weights") or {}) if source_weights is None else source_weights
+        for i in fused:
+            fused[i] *= source_weight(self.chunks[i]["source"], weights)
         order = sorted(fused, key=lambda i: -fused[i])
-        hits = []
+        cap = int(CFG.get("max_per_source") or 0) if max_per_source is None else int(max_per_source or 0)
+        hits, seen, per_source = [], set(), Counter()
         for i in order:
             if cos[i] < min_cos and lex[i] <= 0:
                 continue
+            # 同一内容在多处镜像（如 业务输入/ 与 项目文档/business_inputs/ 的同一问卷）只保留一条
+            text_key = hashlib.sha1(self.chunks[i]["text"].strip().encode("utf-8")).hexdigest()
+            if text_key in seen:
+                continue
+            seen.add(text_key)
+            # 单个文件最多占 cap 个名额，避免一份长文档挤掉其他出处（0 = 不限）
+            if cap and per_source[self.chunks[i]["source"]] >= cap:
+                continue
+            per_source[self.chunks[i]["source"]] += 1
             c = dict(self.chunks[i])
             c.update(score=round(fused[i], 4), cos=round(float(cos[i]), 3))
             hits.append(c)

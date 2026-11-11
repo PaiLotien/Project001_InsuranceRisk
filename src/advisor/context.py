@@ -30,11 +30,20 @@ def build_alert_context(row, thresholds, attribution=None, source_label=""):
     return result
 
 
-def what_if_loss_ratio(cost_ratio, decrease_points):
+def what_if_loss_ratio(cost_ratio, decrease_points, loss_ratio=None):
     cost, delta = float(cost_ratio), float(decrease_points)
     if not all(math.isfinite(v) for v in (cost, delta)) or delta < 0:
         raise ValueError("假设参数必须为有限非负下降百分点")
-    return {"假设条件": f"赔付率下降 {delta:g} 个百分点，费用率保持不变", "假设后成本率": f"{cost - delta:.1f}%"}
+    out = {"假设条件": f"赔付率下降 {delta:g} 个百分点，费用率保持不变", "假设后成本率": f"{cost - delta:.1f}%"}
+    # 同时给出假设后的赔付率，模型无需（也不允许）自己做减法
+    if loss_ratio is not None:
+        try:
+            lr = float(str(loss_ratio).replace("%", "").strip())
+        except ValueError:
+            lr = math.nan
+        if math.isfinite(lr):
+            out["假设后预期赔付率"] = f"{lr - delta:.1f}%"
+    return out
 
 
 def hypothesis_context(question, context):
@@ -46,5 +55,5 @@ def hypothesis_context(question, context):
     if value is None or value == "数据不足":
         result["假设分析"] = "数据不足，需提供当前成本率"
         return result
-    result.update(what_if_loss_ratio(str(value).replace("%", ""), match.group(1)))
+    result.update(what_if_loss_ratio(str(value).replace("%", ""), match.group(1), result.get("预期赔付率")))
     return result

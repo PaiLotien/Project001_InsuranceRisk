@@ -26,3 +26,9 @@ warmup_on_start: true
 lookup_enabled: true
 history_turns: 2
 local_only: true
+# 检索来源加权（路径子串 → 融合分数乘数）：问卷只有“我们的理解 + 提问”，不是答案，降权。
+# 曾试过给 平台规则/ 升权 1.2，会让一份长文档占满 4 个名额（Q20 回退），已撤掉。
+source_weights:
+  调研问卷: 0.5
+# 单个文件最多占几个检索名额（0 = 不限）
+max_per_source: 2

@@ -1238,6 +1238,11 @@ def render_ai_advisor():
         ("向量模型", state(health["embed_model"]), "", "" if health["embed_model"] else "orange", ""),
         ("知识库索引", "需更新" if health["stale"] else "最新", "", "orange" if health["stale"] else "", f"{len(health['manifest'].get('files', {}))} 个文件"),
     ])
+    if not health["online"]:
+        st.warning(f"本机模型服务未连接（{rag.OLLAMA_BASE}）：请先在本机运行 ollama serve；规则预警、看板和导出不受影响。")
+    elif not (health["chat_model"] and health["embed_model"]):
+        missing = [m for m, ok in [(rag.CHAT_MODEL, health["chat_model"]), (rag.EMBED_MODEL, health["embed_model"])] if not ok]
+        st.warning("本机未安装模型：" + "、".join(missing) + "（ollama pull / ollama create 安装后刷新页面）")
     if health["stale"]:
         st.warning("知识库未构建或已过期")
         if st.button("重建知识库"):
