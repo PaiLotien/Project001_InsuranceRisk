@@ -2,6 +2,9 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
 
 from streamlit.testing.v1 import AppTest
 
@@ -9,10 +12,22 @@ from streamlit.testing.v1 import AppTest
 APP = Path(__file__).resolve().parents[1] / "src/dashboard/streamlit_app.py"
 
 
-def test_history_demo_has_seven_dates_and_can_switch_table_and_reset():
-    app = AppTest.from_file(APP, default_timeout=45).run()
-    app.sidebar.radio[0].set_value("核心指标表").run()
-    assert not app.exception
+def _seven_day_history():
+    from src.monitoring.history import demo_history
+    frame = pd.DataFrame({"机构": ["湖北", "湖北"], "车型": ["家用车", "企业车"], "预期赔付率": [60, 70], "成本率1": [20, 25]})
+    return demo_history(frame)
+
+
+def test_history_trend_has_seven_dates_and_can_switch_table_and_reset():
+    # 本机历史以七个日期的样本注入；界面不再提供内置合成历史。
+    with patch("src.dashboard.history_panel.load_history", return_value=_seven_day_history()):
+        app = AppTest.from_file(APP, default_timeout=45).run()
+        app.sidebar.radio[0].set_value("监测总览").run()
+        assert not app.exception
+        _check_history(app)
+
+
+def _check_history(app):
     view = next(r for r in app.radio if r.label == "趋势视图")
     view.set_value("数据表").run()
     tables = [d.value for d in app.dataframe if "日期" in d.value and "记录数" in d.value]
@@ -25,7 +40,7 @@ def test_history_demo_has_seven_dates_and_can_switch_table_and_reset():
 
 def test_batch_requires_preview_and_confirmation_and_charts_have_headroom():
     app = AppTest.from_file(APP, default_timeout=45).run()
-    app.sidebar.radio[0].set_value("风险预警中心").run()
+    app.sidebar.radio[0].set_value("预警中心").run()
     assert not app.exception
     send = next(b for b in app.button if b.label == "发送全部预警通知")
     assert send.disabled

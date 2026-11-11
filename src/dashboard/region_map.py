@@ -44,7 +44,28 @@ def load_china_geojson() -> dict:
         return {"type": "FeatureCollection", "features": []}
     import json
     with MAP_PATH.open(encoding="utf-8") as f:
-        return json.load(f)
+        return _rewind_for_plotly(json.load(f))
+
+
+def _ring_area(ring):
+    return sum(x1 * y2 - x2 * y1 for (x1, y1, *_), (x2, y2, *_) in zip(ring, ring[1:] + ring[:1]))
+
+
+def _rewind_for_plotly(geojson: dict) -> dict:
+    """Plotly geo（d3-geo）要求外环顺时针、内环逆时针；方向相反时会把整个画布填满。"""
+    for feature in geojson.get("features", []):
+        geometry = feature.get("geometry") or {}
+        polygons = geometry.get("coordinates", [])
+        if geometry.get("type") == "Polygon":
+            polygons = [polygons]
+        elif geometry.get("type") != "MultiPolygon":
+            continue
+        for polygon in polygons:
+            for index, ring in enumerate(polygon):
+                clockwise = _ring_area(ring) < 0
+                if (index == 0) != clockwise:
+                    ring.reverse()
+    return geojson
 
 
 def _risk_by_branch(df: pd.DataFrame) -> pd.DataFrame:

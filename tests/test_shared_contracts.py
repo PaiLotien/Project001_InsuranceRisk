@@ -32,13 +32,14 @@ class SharedContractTests(unittest.TestCase):
     def test_upload_modes_show_the_same_nine_report_types(self):
         path = Path(__file__).resolve().parents[1] / "src/dashboard/streamlit_app.py"
         app = AppTest.from_file(path, default_timeout=30).run()
-        app.sidebar.radio[0].set_value("数据上传与Sheet识别").run()
+        app.sidebar.radio[0].set_value("数据质量").run()
         self.assertFalse(app.exception)
-        demo_table = app.dataframe[0].value.copy()
+        report_table = lambda: next(d.value for d in app.dataframe if "编号" in d.value.columns)
+        demo_table = report_table().copy()
         self.assertEqual(demo_table["编号"].tolist(), [f"T{i}" for i in range(1, 10)])
-        app.sidebar.radio[1].set_value("上传Excel文件").run()
+        app.sidebar.radio[1].set_value("上传机构数据").run()
         self.assertFalse(app.exception)
-        assert_frame_equal(demo_table, app.dataframe[0].value)
+        assert_frame_equal(demo_table, report_table())
 
 
 def test_default_attr_model_fields_stay_equal():

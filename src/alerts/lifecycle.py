@@ -98,3 +98,14 @@ class AlertLifecycle:
                     (json.dumps(records, ensure_ascii=False), row["id"]),
                 )
             return len(rows)
+
+    def list_cases(self):
+        """按截止时间返回全部处置单，供处置跟踪页展示。"""
+        with self.connect() as db:
+            rows = db.execute("SELECT * FROM lifecycle ORDER BY deadline").fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["records"] = json.loads(item["records"])
+            result.append(item)
+        return result

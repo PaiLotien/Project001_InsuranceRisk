@@ -21,7 +21,7 @@ from src.dashboard.region_map import _risk_by_branch
 
 FIX = Path(__file__).parent/'fixtures'
 APP = Path(__file__).resolve().parents[1]/'src/dashboard/streamlit_app.py'
-PAGES = ['项目首页','核心指标表','风险预警中心','归因分析中心','AI 风控顾问','预警通知中心','数据上传与Sheet识别']
+PAGES = ['监测总览','预警中心','归因分析','数据质量','处置跟踪','预警通知','行业对标','AI 风控顾问','系统设置']
 
 @pytest.mark.parametrize('total',['合计','合 计','小计','总计','全车型合计','湖北-合计','北京合计'])
 def test_total_variants(total):
@@ -72,7 +72,7 @@ def test_weighted_map():
     assert _risk_by_branch(df).iloc[0]['风险值']==95
 
 @pytest.mark.parametrize('mode',['demo','real_filled.xlsx','flat_no_branch.xlsx'])
-def test_all_seven_pages(mode,tmp_path):
+def test_all_nav_pages(mode,tmp_path):
     with patch('src.config.threshold_store.DB_PATH',tmp_path/'irds.db'):
         app=AppTest.from_file(APP,default_timeout=120).run()
         assert not app.exception
@@ -83,7 +83,7 @@ def test_all_seven_pages(mode,tmp_path):
         else:
             uploaded=UploadedFile(UploadedFileRec('fixture',mode,'application/octet-stream',(FIX/mode).read_bytes()),FileURLs())
             with patch('streamlit.delta_generator.DeltaGenerator.file_uploader',return_value=uploaded):
-                app.sidebar.radio[1].set_value('上传Excel文件').run()
+                app.sidebar.radio[1].set_value('上传机构数据').run()
                 for page in PAGES:
                     app.sidebar.radio[0].set_value(page).run()
                     assert not app.exception, (page,[e.message for e in app.exception])

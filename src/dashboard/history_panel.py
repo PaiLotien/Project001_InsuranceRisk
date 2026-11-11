@@ -6,12 +6,12 @@ import plotly.express as px
 import streamlit as st
 
 from src.monitoring.drift import compare_drift
-from src.monitoring.history import (build_snapshot, build_trend, delete_history, demo_history,
+from src.monitoring.history import (build_snapshot, build_trend, delete_history,
                                     import_history_files, load_history, rapid_changes, save_snapshot)
 
 
 def render_history_panel(df, source_label):
-    with st.expander("历史快照与趋势", expanded=True):
+    with st.container():
         with st.expander("历史数据维护（导入、导出和删除）", expanded=False):
             day = st.date_input("快照日期", value=date.today(), key="history_snapshot_date")
             if st.button("保存当前快照", key="save_history_snapshot"):
@@ -47,11 +47,7 @@ def render_history_panel(df, source_label):
                     delete_history()
                     st.rerun()
 
-        options = ["内置演示历史", "本机历史"] if source_label == "默认演示数据" else ["本机历史", "内置演示历史"]
-        selected = st.radio("历史数据源", options, horizontal=True, key="history_source")
-        history = demo_history(df) if selected == "内置演示历史" else local
-        if selected == "内置演示历史":
-            st.caption("当前为七个日期的合成演示数据，不写入本机历史，也不代表真实业务变化。")
+        history = local
         if history.empty:
             st.info("暂无本机历史。可以保存当前快照，或一次导入多个历史文件。")
             return
@@ -75,7 +71,7 @@ def render_history_panel(df, source_label):
                             config={"scrollZoom": False, "doubleClick": "reset", "displaylogo": False})
         st.caption("率类成本指标有保费时按保费加权；单均保费、频度当前为记录均值，尚无件数和风险暴露分母。")
         st.subheader("短期快速变化提示")
-        st.caption("以下为可调整的演示参考条件，待业务确认；只提示趋势，不改变业务预警等级。")
+        st.caption("以下为可调整的参考条件，待业务确认；只提示趋势，不改变业务预警等级。")
         days = st.number_input("观察天数", 1, 90, 3, key="rapid_days")
         unit = "元" if metric == "单均保费_元" else "个百分点"
         change = st.number_input(f"变化阈值（{unit}）", min_value=0.1, value=5.0, key="rapid_change")
