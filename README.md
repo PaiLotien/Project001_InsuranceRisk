@@ -27,3 +27,18 @@ AI建议原型需另外安装并启动Ollama，在本机执行 ollama pull qwen3
 docs/delivery_20260920.md说明真实功能边界和本轮验证结果。
 该文件是9月历史记录，最新说明以docs/release_20261109.md为准。
 docs/business_inputs为调研输入，不代表所有规则均已确认或实现。
+
+## upgrade/v2 第 2 批：本地 AI 风控顾问
+
+新增校验、通知 dry-run、处置闭环与组合规则的配置、入口及测试说明见 [第 2 批升级说明](docs/upgrade_v2_batch2.md)。
+
+本地顾问配置为 `config/ai_advisor.yaml`，运行时只访问本机 Ollama。先在本机准备对话模型 `qwen3.5:4b`；向量模型文件由管理员下载 Hugging Face 的 `gpustack/bge-m3-GGUF/bge-m3-Q8_0.gguf` 到 `models/`，再执行：
+
+```bash
+ollama create bge-m3-local -f models/Modelfile.bge-m3
+.venv/bin/python scripts/build_advisor_index.py
+# 兼容名称：scripts/build_knowledge_index.py
+.venv/bin/python scripts/run_advisor_eval.py --n 3
+```
+
+索引构建时自动同步 `docs/`、`config/` 到知识目录；自维护内容放 `knowledge/` 其他目录，顾问行为约束放 `skills/`。Skill 修改下次提问生效，知识内容修改后重建索引。索引与 GGUF 不提交 git。不需要 torch 或 sentence-transformers；docx 解析可选安装 python-docx，PDF 文本解析需要本机 poppler-utils。Ollama/模型/索引不可用时界面保留规则结果并显示降级提示。

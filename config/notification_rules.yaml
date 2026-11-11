@@ -485,3 +485,38 @@ email_config:
     系统管理员：信息科技部 王工（demo@example.invalid）
 
     '
+delivery:
+  dry_run: true
+  group_by:
+  - branch
+  - batch
+  inhibit:
+    source: red
+    targets:
+    - yellow
+    - orange
+    equal:
+    - branch
+    - batch
+    - object
+  repeat_interval: 14400
+  routes:
+    yellow:
+    - wecom
+    orange:
+    - wecom
+    - dingtalk
+    red:
+    - wecom
+    - dingtalk
+    - feishu
+    - smtp
+  channels:
+    wecom:
+      url: wecombot://placeholder
+    dingtalk:
+      url: dingtalk://placeholder
+    feishu:
+      url: feishu://placeholder
+    smtp:
+      url: mailto://demo@example.invalid

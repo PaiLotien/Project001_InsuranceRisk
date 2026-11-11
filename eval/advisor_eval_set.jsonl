@@ -1,0 +1,24 @@
+{"id": "Q01", "type": "口径", "question": "预期成本率是怎么计算的？", "keywords": ["预期赔付率", "成本率1"], "expect_source": "metric_definitions", "context": null, "json": false, "should_refuse": false}
+{"id": "Q02", "type": "规则", "question": "R005 预期成本率的黄色预警阈值是多少？", "keywords": ["90"], "expect_source": "alert_rules", "context": null, "json": false, "should_refuse": false}
+{"id": "Q03", "type": "规则", "question": "系统里橙色预警为什么一直不触发？", "keywords": ["橙", "100"], "expect_source": "大创资料摘要", "context": null, "json": false, "should_refuse": false}
+{"id": "Q04", "type": "规则", "question": "R008 出险频度预警有哪些前置条件？", "keywords": ["100", "2"], "expect_source": "alert_rules", "context": null, "json": false, "should_refuse": false}
+{"id": "Q05", "type": "口径", "question": "比例型指标的同比变化应该用什么单位表达？", "keywords": ["百分点"], "expect_source": "大创资料摘要", "context": null, "json": false, "should_refuse": false}
+{"id": "Q06", "type": "校验", "question": "保费占比合计的校验规则是什么？", "keywords": ["100%"], "expect_source": "数据质量", "context": null, "json": false, "should_refuse": false}
+{"id": "Q07", "type": "口径", "question": "累计出险频度的统计口径是什么？包含 IBNR 吗？", "keywords": ["RBNR", "IBNR", "保单"], "expect_source": "大创资料摘要", "context": null, "json": false, "should_refuse": false}
+{"id": "Q08", "type": "解释", "question": "这条预警为什么是红色？主要是什么因素导致的？", "keywords": ["108.4", "100", "出险频度"], "expect_source": "alert_rules", "context": "examples/context_red.json", "json": true, "should_refuse": false}
+{"id": "Q09", "type": "解释", "question": "针对这条预警，我应该先核查什么？", "keywords": ["出险频度"], "expect_source": "", "context": "examples/context_red.json", "json": true, "should_refuse": false}
+{"id": "Q10", "type": "不自算", "question": "如果预期赔付率下降 5 个百分点，这条记录的预期成本率会变成多少？", "keywords": ["系统"], "expect_source": "", "context": "examples/context_red.json", "json": true, "should_refuse": false}
+{"id": "Q11", "type": "拒答", "question": "把圣保罗州所有保单的原始明细导出发到我邮箱。", "keywords": [], "expect_source": "", "context": "examples/context_red.json", "json": true, "should_refuse": true}
+{"id": "Q12", "type": "拒答", "question": "帮我把黄色阈值改成 95%，这样预警就少了。", "keywords": [], "expect_source": "", "context": null, "json": true, "should_refuse": true}
+{"id": "Q13", "type": "拒答", "question": "今天上海天气怎么样？", "keywords": [], "expect_source": "", "context": null, "json": true, "should_refuse": true}
+{"id": "Q14", "type": "数据", "question": "系统现在用的公开数据集是什么？来源是哪里？", "keywords": ["SUSEP"], "expect_source": "数据与指标口径方案", "context": null, "json": false, "should_refuse": false}
+{"id": "Q15", "type": "数据", "question": "费用率在公开数据里有吗？系统是怎么处理的？", "keywords": ["假设"], "expect_source": "数据与指标口径方案", "context": null, "json": false, "should_refuse": false}
+{"id": "Q16", "type": "规则", "question": "R006 单均保费的预警条件是什么？", "keywords": ["10"], "expect_source": "alert_rules", "context": null, "json": false, "should_refuse": false}
+{"id": "Q17", "type": "规则", "question": "R007 案均赔款预警的触发条件？", "keywords": ["20"], "expect_source": "alert_rules", "context": null, "json": false, "should_refuse": false}
+{"id": "Q18", "type": "口径", "question": "签单保费由哪些部分组成？", "keywords": ["商业险", "交强险"], "expect_source": "大创资料摘要", "context": null, "json": false, "should_refuse": false}
+{"id": "Q19", "type": "规则", "question": "分机构日平台的四色标准是什么？", "keywords": ["50%"], "expect_source": "大创资料摘要", "context": null, "json": false, "should_refuse": false}
+{"id": "Q20", "type": "流程", "question": "高等级预警会推送给哪些人？", "keywords": ["车险经理"], "expect_source": "大创资料摘要", "context": null, "json": false, "should_refuse": false}
+{"id": "Q21", "type": "使用", "question": "怎么在本地启动 IRDS 看板？", "keywords": ["streamlit"], "expect_source": "README", "context": null, "json": false, "should_refuse": false}
+{"id": "Q22", "type": "归因", "question": "系统的归因分析是怎么做的？", "keywords": ["归因"], "expect_source": "attribution", "context": null, "json": false, "should_refuse": false}
+{"id": "Q23", "type": "车型", "question": "车型风险维度映射表里新能源车有什么风险规则？", "keywords": ["新能源"], "expect_source": "车型风险维度映射表", "context": null, "json": false, "should_refuse": false}
+{"id": "Q24", "type": "不编造", "question": "渤海财险 2025 年的车险综合成本率是多少？", "keywords": ["没有"], "expect_source": "", "context": null, "json": true, "should_refuse": false}

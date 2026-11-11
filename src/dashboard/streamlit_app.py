@@ -235,7 +235,8 @@ st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 def load_demo_dataset() -> pd.DataFrame:
     path = _PROJECT_ROOT / "data" / "sample" / "demo_dataset.xlsx"
     if path.exists():
-        return pd.read_excel(path, sheet_name="完整数据集")
+        from src.parser.excel_loader import read_excel
+        return read_excel(path, sheet_name="完整数据集")
     return pd.DataFrame()
 
 
@@ -329,14 +330,14 @@ with st.sidebar:
 
     page = st.radio(
         "导航",
-        ["项目首页", "核心指标表", "风险预警中心", "归因分析中心", "AI建议原型", "预警通知中心", "数据上传与Sheet识别"],
+        ["项目首页", "核心指标表", "风险预警中心", "归因分析中心", "AI 风控顾问", "预警通知中心", "数据上传与Sheet识别"],
         index=0,
         format_func=lambda x: {
             "项目首页": "项目首页",
             "核心指标表": "核心指标表",
             "风险预警中心": "风险预警中心",
             "归因分析中心": "归因分析中心",
-            "AI建议原型": "AI建议原型",
+            "AI 风控顾问": "AI 风控顾问",
             "预警通知中心": "预警通知中心",
             "数据上传与Sheet识别": "数据上传与报表识别",
         }[x],
@@ -629,6 +630,11 @@ def render_metrics_table():
 
     with st.expander("数据质量校验"):
         tolerance = st.number_input("保费占比容忍误差（百分点）", 0.0, 10.0, 1.0, 0.1, key="premium_tolerance")
+        from src.validation.schema import validate_frame, top3
+        smart_issues=df.attrs.get('smart_validation')
+        if smart_issues is None: smart_issues=validate_frame(df,'主数据')
+        st.write('问题 TOP3',top3(smart_issues))
+        with st.expander('智能校验明细'): st.dataframe(smart_issues,hide_index=True)
         checks = validation_summary(df, tolerance)
         if checks.empty:
             st.info("当前单表没有可展示的 DQ001 结果；DQ003 默认关闭，DQ002 需同时提供 T2 与 T7。")
@@ -1132,6 +1138,12 @@ def render_upload_and_sheets():
     st.markdown('<div class="ds-section-title">跨表数据质量校验 / Cross-report Check</div>', unsafe_allow_html=True)
     inputs, dq002_result = run_dq002(wb)
     if inputs.ready:
+        from src.validation.cross_report import cross_report_issues
+        from src.validation.schema import top3
+        cross_issues=cross_report_issues(inputs.t2,inputs.t7)
+        st.write('跨表问题 TOP3',top3(cross_issues))
+        with st.expander('跨表问题定位'): st.dataframe(cross_issues,hide_index=True)
+    if inputs.ready:
         st.caption("DQ002：只比较 T2 的“签单保费-当月”与 T7 的“月签单保费”；抽取不到这两个明确时间口径时不会臆造结论。")
         st.dataframe(dq002_result, use_container_width=True, hide_index=True)
     else:
@@ -1164,31 +1176,75 @@ def render_upload_and_sheets():
             # 非 T1/T2 表不强行套用核心指标规则，但允许用户查看前几行，
             # 这样“结构识别”和“可用数据预览”是两个清晰边界。
             if meta.report_type.value not in ("T1", "T2"):
-                preview = pd.read_excel(uploaded, sheet_name=meta.sheet_name, header=None, nrows=12)
+                from src.parser.excel_loader import read_excel
+                preview = read_excel(uploaded, sheet_name=meta.sheet_name, header=None, nrows=12)
                 st.caption("该报表当前为结构识别模式，以下为原始前 12 行预览。")
                 st.dataframe(preview, use_container_width=True, hide_index=True)
 
 
 # 预警通知中心
 def render_notification_center():
+    from src.alerts.lifecycle import AlertLifecycle, STATES
+    from src.notification.channels import dispatch
+    import time
+
+    with st.expander("本地推送与处置闭环"):
+        df, _ = get_usable_data()
+        batch = st.text_input("推送批次", "manual")
+        if st.button("生成多渠道 dry-run outbox"):
+            alerts = [
+                {"branch": r.get("机构", "全辖"), "batch": batch, "object": r.get("车型", ""), "level": r["预警等级"]}
+                for _, r in df.iterrows()
+                if r.get("预警等级") in ("yellow", "orange", "red")
+            ]
+            import yaml
+
+            config = yaml.safe_load(
+                (Path(__file__).resolve().parents[2] / "config/notification_rules.yaml").read_text()
+            )["delivery"]
+            config["dry_run"] = True
+            st.write(dispatch(alerts, config=config))
+        alert_ref = st.text_input("关联预警（机构/批次/车型/规则）")
+        owner = st.text_input("责任人")
+        hours = st.number_input("处置时限（小时）", min_value=1, value=24)
+        if st.button("新建处置单"):
+            try:
+                st.write(AlertLifecycle().create(owner, time.time() + hours * 3600, alert_ref=alert_ref))
+            except ValueError as exc:
+                st.error(str(exc))
+        ident = st.text_input("处置单 ID")
+        state = st.selectbox("下一状态", STATES[1:])
+        note = st.text_input("处置记录")
+        if st.button("更新处置状态"):
+            try:
+                st.write(AlertLifecycle().transition(ident, state, note))
+            except (ValueError, KeyError) as exc:
+                st.error(str(exc))
+        if st.button("检查超时升级"):
+            st.write({"本次升级数": AlertLifecycle().escalate_overdue()})
+
     # SMTP 状态（提前定义，f-string 要用）
     from src.notification.email_sender import is_smtp_available
+
     smtp_available = is_smtp_available()
     mode_badge = (
         '<span style="display:inline-block;background:rgba(74,222,128,0.12);color:#4ade80;'
-        'border:1px solid rgba(74,222,128,0.2);border-radius:6px;padding:2px 10px;'
+        "border:1px solid rgba(74,222,128,0.2);border-radius:6px;padding:2px 10px;"
         'font-size:0.75rem;font-weight:600;">SMTP 实时</span>'
-        if smtp_available else
-        '<span style="display:inline-block;background:rgba(251,191,36,0.10);color:#fbbf24;'
-        'border:1px solid rgba(251,191,36,0.15);border-radius:6px;padding:2px 10px;'
+        if smtp_available
+        else '<span style="display:inline-block;background:rgba(251,191,36,0.10);color:#fbbf24;'
+        "border:1px solid rgba(251,191,36,0.15);border-radius:6px;padding:2px 10px;"
         'font-size:0.75rem;font-weight:600;">模拟模式</span>'
     )
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="margin-bottom:4px;">
         <div style="font-size:1.3rem;font-weight:700;color:#1f2937;letter-spacing:-0.02em;">预警通知中心</div>
         <div style="font-size:0.8rem;color:#64748b;">预警分发 · 收件人匹配 · 邮件生成 · {mode_badge}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     df, source_label = get_usable_data()
     if df.empty:
@@ -1201,7 +1257,8 @@ def render_notification_center():
         return
 
     from src.notification.recipient_mapper import (
-        format_recipient_list, get_notification_context,
+        format_recipient_list,
+        get_notification_context,
     )
     from src.notification.email_templates import generate_html_body, generate_subject
     from src.notification.email_sender import clear_send_history, get_send_history, send_email
@@ -1246,6 +1303,7 @@ def render_notification_center():
 
         # 地址编辑先于邮件模板生成，确保预览和实际投递对象一致。
         from src.notification.address_input import parse_addresses
+
         with col_right:
             st.subheader("收件邮箱")
             manual_to = st.text_area("收件人", key="nc_manual_to")
@@ -1253,8 +1311,7 @@ def render_notification_center():
             address_error = ""
             try:
                 edited_to = parse_addresses(manual_to)
-                edited_cc = [a for a in parse_addresses(manual_cc)
-                             if a.lower() not in {x.lower() for x in edited_to}]
+                edited_cc = [a for a in parse_addresses(manual_cc) if a.lower() not in {x.lower() for x in edited_to}]
                 if not edited_to:
                     address_error = "请填写至少一个收件邮箱。"
             except ValueError as exc:
@@ -1284,7 +1341,9 @@ def render_notification_center():
                 "下钻分析出险频度和案均赔款",
                 "检查该机构和车型的核保政策",
                 "按新续转维度排查逆选择",
-            ] if is_loss_driven else [
+            ]
+            if is_loss_driven
+            else [
                 "检查该车型的市场费用率",
                 "评估渠道费用政策调整空间",
                 "对比同类机构的费用率",
@@ -1295,20 +1354,26 @@ def render_notification_center():
 
         subject = generate_subject(selected, threshold=yellow_threshold)
         html_body = generate_html_body(
-            selected, context=ctx, attribution_summary=attribution_summary, suggestions=suggestions,
+            selected,
+            context=ctx,
+            attribution_summary=attribution_summary,
+            suggestions=suggestions,
             threshold=yellow_threshold,
         )
 
         st.divider()
         st.markdown('<div class="ds-section-title">邮件预览</div>', unsafe_allow_html=True)
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div style="background:rgba(94,234,212,0.06);border:1px solid rgba(94,234,212,0.12);
                     border-radius:8px;padding:14px;margin-bottom:12px;">
             <strong style="color:#334155;font-size:0.8rem;">邮件主题</strong><br/>
             <span style="font-size:0.9rem;color:#1f2937;">{subject}</span>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         with st.container(border=True):
             st.components.v1.html(html_body, height=700, scrolling=True)
@@ -1325,18 +1390,22 @@ def render_notification_center():
         }
         for rd in recipients_data:
             role_display = role_labels.get(rd["角色"], rd["角色"])
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div class="ds-info-card" style="margin-bottom:8px;padding:12px 14px;">
-                <strong style="color:#1f2937;">{rd['姓名']}</strong><br/>
-                <span style="font-size:0.75rem;color:{TEXT_MUTED};">{role_display} — {rd['职务']}</span><br/>
-                <span style="font-size:0.75rem;color:{ACCENT};">{rd['邮箱']}</span>
+                <strong style="color:#1f2937;">{rd["姓名"]}</strong><br/>
+                <span style="font-size:0.75rem;color:{TEXT_MUTED};">{role_display} — {rd["职务"]}</span><br/>
+                <span style="font-size:0.75rem;color:{ACCENT};">{rd["邮箱"]}</span>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
         st.divider()
         st.markdown('<div class="ds-section-title">通知规则</div>', unsafe_allow_html=True)
 
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.15);
                     border-radius:8px;padding:14px;font-size:0.8rem;color:#334155;">
             <strong style="color:#fb923c;">{ctx.escalation_description}</strong><br/><br/>
@@ -1344,24 +1413,28 @@ def render_notification_center():
             <strong>响应时限：</strong>{ctx.response_hours} 小时内<br/>
             <strong>涉及部门：</strong>{ctx.department}
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         st.divider()
         st.markdown('<div class="ds-section-title">发送操作</div>', unsafe_allow_html=True)
 
-        if st.button("发送邮件", type="primary", use_container_width=True,
-                     disabled=bool(address_error)):
+        if st.button("发送邮件", type="primary", use_container_width=True, disabled=bool(address_error)):
             with st.spinner("正在发送……"):
                 record = send_email(
-                    subject=subject, body=html_body,
-                    to_list=edited_to, cc_list=edited_cc, context=ctx,
+                    subject=subject,
+                    body=html_body,
+                    to_list=edited_to,
+                    cc_list=edited_cc,
+                    context=ctx,
                 )
             if record.status == "success":
                 st.success(f"邮件发送成功！({record.mode.upper()})")
                 st.markdown(f"""
                 **发送编号**：`{record.send_id}`
                 **时间**：{record.timestamp}
-                **收件人**：{', '.join(record.recipients)}
+                **收件人**：{", ".join(record.recipients)}
                 **模式**：{record.mode.upper()}
                 **状态**：成功
                 """)
@@ -1379,13 +1452,16 @@ def render_notification_center():
     if history:
         history_data = []
         for h in history:
-            history_data.append({
-                "发送编号": h.send_id, "时间": h.timestamp,
-                "模式": h.mode.upper(),
-                "主题": h.subject[:60] + ("..." if len(h.subject) > 60 else ""),
-                "收件人数": len(h.recipients),
-                "状态": "成功" if h.status == "success" else f"失败：{h.error_message}",
-            })
+            history_data.append(
+                {
+                    "发送编号": h.send_id,
+                    "时间": h.timestamp,
+                    "模式": h.mode.upper(),
+                    "主题": h.subject[:60] + ("..." if len(h.subject) > 60 else ""),
+                    "收件人数": len(h.recipients),
+                    "状态": "成功" if h.status == "success" else f"失败：{h.error_message}",
+                }
+            )
         st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
     else:
         st.info("暂无发送记录。选择预警并填写收件邮箱后即可生成模拟发送记录。")
@@ -1393,75 +1469,94 @@ def render_notification_center():
     st.caption(f"数据来源：{source_label}")
 
 
-# AI建议原型
+# AI 风控顾问
+
 def render_ai_advisor():
-    st.markdown("<div style='font-size:1.3rem;font-weight:700;margin-bottom:16px;'>AI建议原型</div>", unsafe_allow_html=True)
-    st.info("本页只让本地 4B 模型解释规则结果并生成建议；预警等级仍由 YAML 规则引擎决定。")
+    from src.advisor.context import build_alert_context
+    from src.advisor.service import advisor_health, rebuild_index, stream_advisor, ask_advisor
+    from src.advisor import rag
+
+    st.subheader("AI 风控顾问")
+    st.caption("本地运行，数据不出本机")
+    health = advisor_health()
+    st.write(
+        {
+            "模型在线": health["online"],
+            "对话模型": health["chat_model"],
+            "向量模型": health["embed_model"],
+            "知识库": health["manifest"],
+        }
+    )
+    if health["stale"]:
+        st.warning("知识库未构建或已过期")
+        if st.button("重建知识库"):
+            try:
+                with st.status("构建本地知识库"):
+                    rebuild_index()
+                st.rerun()
+            except Exception as exc:
+                st.error(f"本地索引构建失败：{exc}")
+    with st.expander("管理员：Skill 与知识文件"):
+        st.json(rag.load_skills()[1])
+        st.write(sorted(health["manifest"].get("files", {})))
     df, source_label = get_usable_data()
     if df.empty:
-        st.warning("请选择数据源以进行 AI 建议分析。")
+        st.info("请选择数据源")
         return
-    alerts = df[df["预警等级"].isin(["red", "orange", "yellow"])].copy()
+    alerts = df[df["预警等级"].isin(["red", "orange", "yellow"])]
     if alerts.empty:
-        st.success("当前没有预警记录。")
+        st.success("当前没有预警记录")
         return
-    options = [f"{r['机构']} | {r['车型']} | 预期成本率={r['预期成本率']:.1f}% | {ALERT_LABELS[r['预警等级']]}" for _, r in alerts.iterrows()]
-    idx = st.selectbox("选择一条规则预警", range(len(options)), format_func=lambda i: options[i], key="ai_alert_select")
-    row = alerts.iloc[idx]
-    thresholds = configured_thresholds()
-    yellow_threshold = st.session_state.get("yellow_alert_threshold", thresholds["yellow"])
-    rule_text = (
-        f"当前预警等级={ALERT_LABELS[row['预警等级']]}；预期成本率={row['预期成本率']:.1f}%；"
-        f"黄色阈值={yellow_threshold:g}%；红色阈值={thresholds['red']:g}%。"
+    idx = st.selectbox(
+        "选择一条规则预警",
+        range(len(alerts)),
+        format_func=lambda i: f"{alerts.iloc[i]['机构']} | {alerts.iloc[i]['车型']}",
     )
-    record = row.to_dict()
-    st.dataframe(row.to_frame().T, use_container_width=True, hide_index=True)
-    from src.llm_advisor import chat
-    chat_key = f"ai_chat_{idx}"
-    if chat_key not in st.session_state:
-        st.session_state[chat_key] = []
-    st.subheader("直接咨询本地模型")
-    st.caption("你可以直接提问，例如：为什么触发预警？我应该先检查什么？这个建议有哪些不确定性？")
-    for item in st.session_state[chat_key]:
-        with st.chat_message(item["role"]):
-            st.markdown(item["content"])
-    question = st.chat_input("输入你的问题……", key=f"ai_question_{idx}")
-    if question:
-        st.session_state[chat_key].append({"role": "user", "content": question})
-        with st.chat_message("user"):
-            st.markdown(question)
-        with st.chat_message("assistant"):
-            with st.spinner("本地模型思考中……"):
-                answer = chat(question, record, rule_text)
-            st.markdown(answer)
-        st.session_state[chat_key].append({"role": "assistant", "content": answer})
-    st.divider()
-    st.caption("也可以使用下面的结构化建议按钮；对话模式不要求模型返回 JSON。")
-    if st.button("调用本地 qwen3.5:4b 生成建议", type="primary"):
-        from src.llm_advisor import analyze
-        with st.spinner("正在调用本机模型……"):
-            result = analyze(record, rule_text)
-        if "error" in result:
+    context = build_alert_context(alerts.iloc[idx].to_dict(), configured_thresholds(), source_label=source_label)
+    st.dataframe(pd.DataFrame(context.items(), columns=["系统依据", "值"]), hide_index=True)
+
+    def show_meta(meta):
+        with st.expander("引用的知识片段"):
+            for hit in meta["hits"]:
+                st.write(f"[{hit['cite']}] {hit['source']}｜{hit['section']}｜{hit['cos']}")
+                st.text(hit["text"])
+        if meta["invalid_citations"]:
+            st.warning("有引用无法对应，请人工核对")
+        if meta["untraced_numbers"]:
+            st.warning("有数字无法溯源，请以系统计算结果为准")
+        st.caption(f"用时：{meta['timing']}；模型：{rag.CHAT_MODEL}")
+
+    if st.button("生成预警解读"):
+        result = ask_advisor("请解释这条预警的原因并给出核查建议", context, json_mode=True)
+        if result.get("error"):
             st.error(result["error"])
-            if result.get("raw"):
-                st.caption("以下是模型原文，未通过 JSON 校验；不会写入规则结果或发送通知。")
-                st.code(result["raw"])
-            return
-        st.subheader("模型建议")
-        st.write(result["risk_summary"])
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**证据**")
-            for item in result["evidence"]:
-                st.markdown(f"- {item}")
-            st.markdown("**建议**")
-            for item in result["suggestions"]:
-                st.markdown(f"- {item}")
-        with col2:
-            st.markdown("**不确定性 / 待核查**")
-            for item in result["uncertainty"]:
-                st.markdown(f"- {item}")
-        st.caption(f"数据来源：{source_label}；模型输出仅供辅助，规则结果不由模型改写。")
+        else:
+            data = result["json"]
+            if data["refused"]:
+                st.info("顾问拒答：请核对问题范围与依据")
+            for label, key in [
+                ("结论", "answer"),
+                ("依据", "evidence"),
+                ("建议", "suggestions"),
+                ("待核查", "uncertainty"),
+            ]:
+                st.markdown("**" + label + "**")
+                st.write(data[key])
+        show_meta(result)
+    key = f"advisor_history_{idx}_{source_label}"
+    history = st.session_state.setdefault(key, [])
+    for message in history:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+    question = st.chat_input("输入你的问题……")
+    if question:
+        with st.chat_message("user"):
+            st.write(question)
+        with st.chat_message("assistant"):
+            iterator, meta = stream_advisor(question, context, history=history)
+            answer = st.write_stream(iterator)
+            show_meta(meta)
+        history.extend([{"role": "user", "content": question}, {"role": "assistant", "content": answer}])
 
 
 # 主路由
@@ -1470,7 +1565,7 @@ PAGE_MAP = {
     "核心指标表": render_metrics_table,
     "风险预警中心": render_alert_center,
     "归因分析中心": render_attribution,
-    "AI建议原型": render_ai_advisor,
+    "AI 风控顾问": render_ai_advisor,
     "预警通知中心": render_notification_center,
     "数据上传与Sheet识别": render_upload_and_sheets,
 }

@@ -1,42 +1,197 @@
-# 数据质量校验规则
-# 来源：数据质量校验规则表.xlsx
-#
-# 校验与阻断流程必须分开：DQ001 当前可在单表中执行；DQ002 需要 T2/T7 两张表；
-# DQ003 受工作日和非工作日业务量差异影响，保留配置但默认关闭。
-
 rules:
-  - id: DQ001
-    name: 保费占比合计
-    enabled: true
-    mode: single_table
-    applies_to: [T1, T2]
-    tolerance_percentage_points: 1.0
-    description: "主表非合计车型的保费占比合计应约等于100%。"
-    failure_message: "保费占比合计异常，请检查数据是否遗漏或重复。"
-    source: "数据质量校验规则表.xlsx DQ001"
-    note: "子表不适用；当前页面尚未完整区分主/子表。±1个百分点沿用原实现而非业务已确认值。中止流程仅为参考建议，未启用。"
-
-  - id: DQ002
-    name: 跨表总保费一致性
-    enabled: true
-    mode: cross_table
-    left_report: T2
-    left_metric: 当月累计签单保费
-    right_report: T7
-    right_metric: 月签单保费
-    tolerance: 0.0
-    description: "T2当月累计签单保费与T7对应机构月签单保费应一致。"
-    failure_message: "跨表总保费不一致，请核查数据口径或抽取时间。"
-    source: "数据质量校验规则表.xlsx DQ002"
-    note: "原表的中止预警建议标注为仅供参考；系统先报告结果，不擅自中止用户流程。"
-
-  - id: DQ003
-    name: 日累计和月累计的粗略关系
-    enabled: false
-    mode: single_table
-    applies_to: [T2]
-    ratio_tolerance: 0.20
-    description: "当日值×当月天数与当月累计值仅作粗略提示。"
-    failure_message: "日累计与月累计关系偏离，请结合工作日口径复核。"
-    source: "数据质量校验规则表.xlsx DQ003"
-    note: "由于工作日/非工作日差异大，暂不启用；20%仅为原表举例，非业务确认阈值。"
+- id: DQ001
+  name: 保费占比合计
+  enabled: true
+  mode: single_table
+  applies_to:
+  - T1
+  - T2
+  tolerance_percentage_points: 1.0
+  description: 主表非合计车型的保费占比合计应约等于100%。
+  failure_message: 保费占比合计异常，请检查数据是否遗漏或重复。
+  source: 数据质量校验规则表.xlsx DQ001
+  note: 子表不适用；当前页面尚未完整区分主/子表。±1个百分点沿用原实现而非业务已确认值。中止流程仅为参考建议，未启用。
+- id: DQ002
+  name: 跨表总保费一致性
+  enabled: true
+  mode: cross_table
+  left_report: T2
+  left_metric: 当月累计签单保费
+  right_report: T7
+  right_metric: 月签单保费
+  tolerance: 0.0
+  description: T2当月累计签单保费与T7对应机构月签单保费应一致。
+  failure_message: 跨表总保费不一致，请核查数据口径或抽取时间。
+  source: 数据质量校验规则表.xlsx DQ002
+  note: 原表的中止预警建议标注为仅供参考；系统先报告结果，不擅自中止用户流程。
+- id: DQ003
+  name: 日累计和月累计的粗略关系
+  enabled: false
+  mode: single_table
+  applies_to:
+  - T2
+  ratio_tolerance: 0.2
+  description: 当日值×当月天数与当月累计值仅作粗略提示。
+  failure_message: 日累计与月累计关系偏离，请结合工作日口径复核。
+  source: 数据质量校验规则表.xlsx DQ003
+  note: 由于工作日/非工作日差异大，暂不启用；20%仅为原表举例，非业务确认阈值。
+schema_rules:
+- id: DQ101
+  kind: required
+  column: 机构
+  name: 机构必填
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ102
+  kind: required
+  column: 车型
+  name: 车型必填
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ103
+  kind: required
+  column: 预期赔付率
+  name: 预期赔付率必填
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ104
+  kind: required
+  column: 成本率1
+  name: 成本率1必填
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ105
+  kind: required
+  column: 预期成本率
+  name: 预期成本率必填
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ111
+  kind: numeric
+  column: 预期赔付率
+  name: 预期赔付率必须为有限数值
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ112
+  kind: numeric
+  column: 成本率1
+  name: 成本率1必须为有限数值
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ113
+  kind: numeric
+  column: 预期成本率
+  name: 预期成本率必须为有限数值
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ114
+  kind: numeric
+  column: 签单保费
+  name: 签单保费必须为有限数值
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ115
+  kind: numeric
+  column: 赔款
+  name: 赔款必须为有限数值
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ116
+  kind: numeric
+  column: 保费占比
+  name: 保费占比必须为有限数值
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ121
+  kind: range
+  column: 签单保费
+  name: 签单保费取值范围
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  min: 0
+  max: 1.0e+16
+- id: DQ122
+  kind: range
+  column: 赔款
+  name: 赔款取值范围
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  min: 0
+  max: 1.0e+16
+- id: DQ123
+  kind: range
+  column: 保费占比
+  name: 保费占比取值范围
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  min: 0
+  max: 100
+- id: DQ124
+  kind: range
+  column: 成本率1
+  name: 成本率1取值范围
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  min: 0
+  max: 100
+- id: DQ131
+  kind: text
+  column: 机构
+  name: 机构须为文本
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ132
+  kind: text
+  column: 车型
+  name: 车型须为文本
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ001
+  kind: share
+  column: 保费占比
+  name: 保费占比加总=100%
+  severity: error
+  source: 数据质量校验规则表.xlsx DQ001；沿用±1个百分点容差
+  tolerance: 1.0
+- id: DQ141
+  kind: formula
+  column: 预期成本率
+  name: 成本率=赔付率+费用率
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  inputs:
+  - 预期赔付率
+  - 成本率1
+  operation: sum
+  tolerance: 0.1
+- id: DQ142
+  kind: formula
+  column: 赔付率
+  name: 赔付率≈赔款/保费
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  inputs:
+  - 赔款
+  - 签单保费
+  operation: ratio
+  tolerance: 0.1
+- id: DQ151
+  kind: total_required
+  column: 车型
+  name: 机构合计行
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+- id: DQ152
+  kind: total_sum
+  column: 签单保费
+  name: 合计=明细之和
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  tolerance: 0.01
+- id: DQ153
+  kind: total_sum
+  column: 赔款
+  name: 合计=明细之和
+  severity: error
+  source: 工程完整性校验（非新增业务阈值）
+  tolerance: 0.01

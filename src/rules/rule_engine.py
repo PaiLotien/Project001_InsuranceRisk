@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+from src.rules.expressions import COMPARATORS, SYMBOLS, safe_condition, matrix_threshold
 
 from src.core.constants import (
     METRIC_AVG_PREMIUM,
@@ -92,7 +93,7 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
             condition_metric = condition.get("metric", "")
             candidates = []
             for m in metrics:
-                if m.branch != target.branch or m.vehicle_type != target.vehicle_type:
+                if m.branch != target.branch or m.vehicle_type != target.vehicle_type or m.source_block != target.source_block:
                     continue
                 if m.metric_name != condition_metric:
                     continue
@@ -113,17 +114,7 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
             if not (math.isfinite(left) and math.isfinite(right)):
                 return False
             op = condition.get("operator", "gt")
-            matched = False
-            if op == "gt":
-                matched = left > right
-            elif op == "gte":
-                matched = left >= right
-            elif op == "lt":
-                matched = left < right
-            elif op == "lte":
-                matched = left <= right
-            elif op == "eq":
-                matched = left == right
+            matched = COMPARATORS.get(op, lambda a,b: False)(left,right)
             if not matched:
                 return False
         return True
@@ -143,7 +134,7 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
             continue
         if not preconditions_met(m):
             continue
-        key = (m.branch, m.vehicle_type, m.time_dimension, m.dimension_1, m.dimension_2)
+        key = (m.branch, m.vehicle_type, m.time_dimension, m.dimension_1, m.dimension_2, m.source_block)
         if key in vehicle_values:
             duplicate_keys.add(key)
         vehicle_values[key] = m.value
@@ -157,21 +148,10 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
             continue
         if not math.isfinite(current_value):
             continue
-        branch, vehicle_type, time_dimension, _, _ = key
-        matched = False
-        compare_operator = ">"
-        if operator == "gt":
-            matched, compare_operator = current_value > threshold, ">"
-        elif operator == "gte":
-            matched, compare_operator = current_value >= threshold, ">="
-        elif operator == "lt":
-            matched, compare_operator = current_value < threshold, "<"
-        elif operator == "lte":
-            matched, compare_operator = current_value <= threshold, "<="
-        elif operator == "change_gt":
-            matched, compare_operator = current_value > threshold, ">"
-        elif operator == "change_lt":
-            matched, compare_operator = current_value < threshold, "<"
+        branch, vehicle_type, time_dimension, dim1, dim2, block = key
+        effective_threshold = matrix_threshold(branch, vehicle_type, rule_id, threshold)
+        matched = COMPARATORS.get(operator, lambda a,b: False)(current_value,effective_threshold)
+        compare_operator = SYMBOLS.get(operator, '>')
 
         if not matched:
             continue
@@ -185,11 +165,12 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
             vehicle_type=vehicle_type,
             metric_name=metric_name,
             current_value=round(current_value, 2),
-            threshold=threshold,
+            threshold=effective_threshold,
             alert_level=level,
-            trigger_reason=f"{time_dimension} {change_label} = {current_value:.2f}{unit_label}，触发规则阈值 {threshold}{unit_label}",
+            trigger_reason=f"{time_dimension} {change_label} = {current_value:.2f}{unit_label}，触发规则阈值 {effective_threshold}{unit_label}",
             rule_id=rule_id,
             compare_operator=compare_operator,
+            time_dimension=time_dimension, dimension_1=dim1, dimension_2=dim2,source_block=block,
         ))
 
     return alerts
@@ -198,15 +179,29 @@ def evaluate_rule(rule: dict, metrics: list[MetricCell]) -> list[AlertRecord]:
 def run_all_rules(
     metrics: list[MetricCell],
     rules: Optional[list[dict]] = None,
+    combinations: Optional[list[dict]] = None,
 ) -> list[AlertRecord]:
     """运行全部启用规则，按等级及偏离度排列预警。"""
     if rules is None:
         rules = load_alert_rules()
 
+    if combinations is None:
+        path=Path(__file__).resolve().parents[2]/'config/alert_rules.yaml'
+        combinations=(yaml.safe_load(path.read_text()) or {}).get('combinations',[])
     all_alerts = []
     for rule in rules:
-        alerts = evaluate_rule(rule, metrics)
-        all_alerts.extend(alerts)
+        all_alerts.extend(evaluate_rule(rule,metrics))
+    groups={}
+    for alert in all_alerts:
+        key=(alert.branch,alert.vehicle_type,alert.time_dimension,alert.dimension_1,alert.dimension_2,alert.source_block)
+        groups.setdefault(key,[]).append(alert)
+    for found in groups.values():
+        flags={a.rule_id:True for a in found}
+        upgrade=any(c.get('enabled',True) and safe_condition(c['expression'],flags) for c in combinations)
+        if upgrade:
+            for alert in found:
+                alert.alert_level={AlertLevel.YELLOW:AlertLevel.ORANGE,AlertLevel.ORANGE:AlertLevel.RED,AlertLevel.RED:AlertLevel.RED}[alert.alert_level]
+                alert.trigger_reason+='；组合条件成立，升一级'
 
     # 排序：红色 > 橙色 > 黄色；同等级按偏离度排序
     level_order = {AlertLevel.RED: 0, AlertLevel.ORANGE: 1, AlertLevel.YELLOW: 2}

@@ -13,3 +13,10 @@ data/raw/
 data/test/
 result/
 .DS_Store
+
+data/runtime/
+knowledge_index/
+*.gguf
+eval/results_*
+knowledge/项目文档/
+knowledge/配置规则/

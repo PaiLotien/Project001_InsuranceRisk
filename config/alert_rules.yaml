@@ -97,3 +97,11 @@ rules:
     applies_to: [T1, T2]
     source: "系统原有业务经验阈值；问卷E4仅为问题设置说明，并非业务确认答复"
     note: "保留既有行为，待业务确认，不计入Excel四条明确阈值规则。"
+
+# 组合条件引用同机构、车型、期间、区块及维度的规则命中结果；只升一级，最高红色。
+# R008 已包含频度恶化的业务前置条件，R007 为案均恶化。
+combinations:
+  - id: C001
+    expression: R008 AND R007
+    action: upgrade_one
+    enabled: true

@@ -1,0 +1,15 @@
+ollama_base: http://127.0.0.1:11434
+chat_model: qwen3.5:4b
+embed_model: bge-m3-local
+knowledge_dir: knowledge
+index_dir: knowledge_index
+skills_dir: skills
+top_k: 5
+chunk_chars: 600
+chunk_overlap: 80
+min_cos: 0.35
+temperature: 0.1
+num_ctx: 8192
+num_predict: 600
+history_turns: 2
+local_only: true

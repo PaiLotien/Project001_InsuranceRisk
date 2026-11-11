@@ -81,6 +81,10 @@ class AlertRecord:
     rule_id: str = ""
     compare_operator: str = ">"
     triggered_at: datetime = field(default_factory=datetime.now)
+    time_dimension: str = ""
+    dimension_1: str = ""
+    dimension_2: str = ""
+    source_block: int = 0
 
 
 @dataclass

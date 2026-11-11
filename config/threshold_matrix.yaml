@@ -1,0 +1,3 @@
+# 精确匹配机构×车型×规则；未配置时保留全局阈值与比较符。
+# 示例：{branch: 湖北, vehicle_type: 家用车, rule_id: R005, threshold: 92}
+thresholds: []

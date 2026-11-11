@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 import yaml
+from src.rules.expressions import COMPARATORS, matrix_threshold
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -42,11 +43,11 @@ def _level(value: float, thresholds: dict[str, float]) -> str:
     if pd.isna(value):
         return "normal"
     # 规则引擎采用“最高等级优先”：红 > 橙 > 黄。
-    if value > thresholds["red"]:
+    if COMPARATORS["gt"](value, thresholds["red"]):
         return "red"
-    if value > thresholds["orange"] and thresholds["orange"] < thresholds["red"]:
+    if COMPARATORS["gt"](value, thresholds["orange"]) and thresholds["orange"] < thresholds["red"]:
         return "orange"
-    if value > thresholds["yellow"]:
+    if COMPARATORS["gt"](value, thresholds["yellow"]):
         return "yellow"
     return "normal"
 
@@ -78,7 +79,11 @@ def apply_alert_rules(df: pd.DataFrame, yellow_threshold: float | None = None) -
         if yellow_threshold is not None:
             thresholds["yellow"] = float(yellow_threshold)
         values = pd.to_numeric(out["预期成本率"], errors="coerce")
-        out["预警等级"] = values.map(lambda value: _level(value, thresholds))
+        out["预警等级"] = [
+            _level(value, {**thresholds,
+                'yellow':matrix_threshold(row.get('机构',''),row.get('车型',''),'R005',thresholds['yellow']),
+                'red':matrix_threshold(row.get('机构',''),row.get('车型',''),'R010',thresholds['red'])})
+            for value,(_,row) in zip(values,out.iterrows())]
     else:
         out["预警等级"] = "normal"
     out.attrs["yellow_threshold"] = yellow_threshold
