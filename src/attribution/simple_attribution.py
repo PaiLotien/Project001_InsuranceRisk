@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.attribution.evidence import condition_evidence
+from src.attribution.decomposition import log_decomposition
 from src.alerts.thresholds import configured_thresholds
 from src.core.models import AttributionItem
 from src.utils.helpers import safe_float
@@ -65,13 +66,14 @@ class AttrResult:
     triggered_rules: list = field(default_factory=list)
     tri_factor_analysis: dict = field(default_factory=dict)
     suggestions: list = field(default_factory=list)
+    quantitative_analysis: dict = field(default_factory=dict)
     summary: str = ""
     items: list = field(default_factory=list)
 
 
 def analyze(row, df_peer=None, *, yellow_threshold: float | None = None,
-            frequency_threshold: float | None = None, premium_threshold: float | None = None) -> AttrResult:
-    """分析单条预警；df_peer 参数保留兼容，当前不参与计算。"""
+            frequency_threshold: float | None = None, premium_threshold: float | None = None, reference=None) -> AttrResult:
+    """分析单条预警；df_peer 参数保留兼容，当前不参与计算；reference 为显式历史基准。"""
     rules = get_rules()
     if yellow_threshold is None:
         yellow_threshold = configured_thresholds()["yellow"]
@@ -152,14 +154,14 @@ def analyze(row, df_peer=None, *, yellow_threshold: float | None = None,
                     "conditions": matched_conditions,
                 })
 
-    claim_freq = row.get("累计出险频度", None)
-    avg_premium = row.get("单均保费_元", None)
+    claim_freq = safe_float(row.get("累计出险频度"))
+    avg_premium = safe_float(row.get("单均保费_元"))
 
-    reference = rules.get("tri_factor_analysis", {}).get("reference_thresholds", {})
+    reference_thresholds = rules.get("tri_factor_analysis", {}).get("reference_thresholds", {})
     if frequency_threshold is None:
-        frequency_threshold = float(reference.get("claim_frequency_percent", 25))
+        frequency_threshold = float(reference_thresholds.get("claim_frequency_percent", 25))
     if premium_threshold is None:
-        premium_threshold = float(reference.get("average_premium_yuan", 2000))
+        premium_threshold = float(reference_thresholds.get("average_premium_yuan", 2000))
     # 以下是可配置参考阈值；缺少历史基准，不能判断同比变化。
     tri_findings = []
     freq_up = claim_freq and claim_freq > frequency_threshold
@@ -189,22 +191,34 @@ def analyze(row, df_peer=None, *, yellow_threshold: float | None = None,
             "detail": "可能原因：自主定价系数偏低、业务结构变化、竞争性降价。应对：复核自主定价系数。",
         }
 
-    if claim_freq is not None:
-        result.items.append(AttrItem(
-            dimension="三要素",
-            factor_name="出险频度",
-            contribution_pct=round(min(claim_freq / 35 * 40, 40), 1),
-            description=f"累计出险频度 {claim_freq:.1f}%——事故频率参考",
-            is_primary=False,
-        ))
-    if avg_premium is not None:
-        result.items.append(AttrItem(
-            dimension="三要素",
-            factor_name="单均保费",
-            contribution_pct=round((1 - min(avg_premium, 4000) / 4000) * 25, 1),
-            description=f"单均保费 {avg_premium:.0f} 元——保费充足度参考",
-            is_primary=False,
-        ))
+    baseline = reference if reference is not None else {
+        str(key)[3:]: value for key, value in row.items() if str(key).startswith("基期_")
+    }
+    quantitative = log_decomposition(baseline, row)
+    result.quantitative_analysis = quantitative
+    if not quantitative["fallback"]:
+        result.tri_factor_analysis = {
+            **quantitative, "severity": "高" if quantitative["total_change"] > 0 else "低",
+            "summary": "赔付率三要素对数分解",
+            "detail": "贡献以自然对数表示，三项之和等于赔付率对数变化。",
+        }
+        for name, contribution in quantitative["contributions"].items():
+            result.items.append(AttrItem(
+                dimension="三要素", factor_name=name, contribution_pct=contribution * 100,
+                description=f"对数贡献 {contribution:+.6f}（非百分点）",
+                is_primary=contribution == max(quantitative["contributions"].values()),
+            ))
+    else:
+        if result.tri_factor_analysis:
+            result.tri_factor_analysis.update({"fallback": True, "warning": quantitative["warning"]})
+        for name, value in (("出险频度", safe_float(claim_freq)),
+                            ("单均保费", safe_float(avg_premium))):
+            if value is not None and math.isfinite(value):
+                result.items.append(AttrItem(
+                    dimension="三要素", factor_name=name, contribution_pct=0,
+                    description=f"fallback：{name} {value:g}；仅作水平参考，无法量化历史贡献",
+                    is_primary=False,
+                ))
 
     suggestions = []
     for rule in result.triggered_rules:

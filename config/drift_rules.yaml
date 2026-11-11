@@ -7,3 +7,12 @@ drift:
   missing_rate:
     stable_delta_lt: 0.05
     watch_delta_lt: 0.20
+
+# 独立统计层，仅输出统计信号，不参与黄橙红规则。
+statistical_anomaly:
+  temporal:
+    window: 14
+    minimum_periods: 7
+    z_threshold: 2.0
+    consecutive_days: 3
+    scale_floor: 0.1
