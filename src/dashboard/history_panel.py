@@ -8,6 +8,7 @@ import streamlit as st
 from src.monitoring.drift import compare_drift
 from src.monitoring.history import (build_snapshot, build_trend, delete_history,
                                     import_history_files, load_history, rapid_changes, save_snapshot)
+from src.dashboard.export import present_frame
 
 
 def render_history_panel(df, source_label):
@@ -63,7 +64,7 @@ def render_history_panel(df, source_label):
         if st.button("重置图表视图", key="history_reset"):
             st.session_state["history_plot_rev"] = st.session_state.get("history_plot_rev", 0) + 1
         if view == "数据表":
-            st.dataframe(trend, hide_index=True, use_container_width=True)
+            st.dataframe(present_frame(trend), hide_index=True, use_container_width=True)
         elif not trend.empty:
             fig = px.line(trend, x="日期", y=metric, markers=True)
             fig.update_layout(height=320, dragmode="pan", margin=dict(t=20, b=30))
@@ -78,7 +79,7 @@ def render_history_panel(df, source_label):
         direction = st.selectbox("监测方向", ["上升", "下降"], index=1 if metric == "单均保费_元" else 0, key="rapid_direction")
         signals = rapid_changes(trend, metric, days, change, direction)
         if not signals.empty:
-            st.dataframe(signals, hide_index=True, use_container_width=True)
+            st.dataframe(present_frame(signals), hide_index=True, use_container_width=True)
 
         st.subheader("数据漂移监测")
         current = build_snapshot(df, source_label, day)
@@ -88,4 +89,4 @@ def render_history_panel(df, source_label):
             return
         baseline = st.selectbox("选择基准日期", dates, key="drift_baseline_day")
         comparison = compare_drift(history[history["日期"].eq(baseline)], current)
-        st.dataframe(comparison, hide_index=True, use_container_width=True)
+        st.dataframe(present_frame(comparison), hide_index=True, use_container_width=True)

@@ -13,6 +13,7 @@ import streamlit as st
 
 from src.dashboard.region_map import load_china_geojson
 from src.dashboard.theme import kpi_row, note, page_title, plot_template, section
+from src.dashboard.export import present_frame
 
 CHINA_DIR = Path(__file__).resolve().parents[2] / "data" / "official" / "china"
 SEPARATE_CITIES = ("大连", "宁波", "厦门", "青岛", "深圳")
@@ -100,7 +101,7 @@ def render_industry():
             section("省级排名")
             table = frame[["地区", "保费_财产险业务", "赔付_财产险业务", "财产险简单赔付率_%"]].rename(columns={
                 "保费_财产险业务": "保费(亿元)", "赔付_财产险业务": "赔付(亿元)", "财产险简单赔付率_%": "赔付率(%)"})
-            st.dataframe(table.sort_values("赔付率(%)", ascending=False), hide_index=True, use_container_width=True, height=440,
+            st.dataframe(present_frame(table.sort_values("赔付率(%)", ascending=False)), hide_index=True, use_container_width=True, height=440,
                          column_config={"地区": st.column_config.TextColumn(width="small"),
                                         "赔付率(%)": st.column_config.NumberColumn(format="%.1f")})
         note(SCOPE_PROVINCE + " 来源：国家统计局《中国统计年鉴》表 18-22（2021 版为 18-21），数据年度 2020–2024。")
@@ -181,6 +182,6 @@ def render_industry():
         merged["财产险赔付/汽车(元)"] = merged["赔付_财产险业务"] * 1e8 / (merged["民用汽车_万辆"] * 1e4)
         show = merged[["地区", "民用汽车_万辆", "保费_财产险业务", "财产险保费/汽车(元)", "财产险赔付/汽车(元)"]].rename(
             columns={"民用汽车_万辆": "民用汽车(万辆)", "保费_财产险业务": "财产险保费(亿元)"}).round(1)
-        st.dataframe(show.sort_values("财产险保费/汽车(元)", ascending=False), hide_index=True, use_container_width=True, height=420)
+        st.dataframe(present_frame(show.sort_values("财产险保费/汽车(元)", ascending=False)), hide_index=True, use_container_width=True, height=420)
         note("代理指标：2024 年省级财产险保费（国家统计局）÷ 2024 年末民用汽车拥有量（国家统计局）。"
              "分子含非车险险种、分母不等于承保车辆，仅用于横向规模比较，不能视为车均保费。")

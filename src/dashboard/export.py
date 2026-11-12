@@ -7,12 +7,49 @@ import yaml
 from src.alerts.thresholds import load_alert_config, configured_thresholds
 
 LABELS = {'normal':'正常','yellow':'黄色','orange':'橙色','red':'红色'}
+MISSING_DISPLAY = "—"
+_MISSING_TOKENS = {"none", "nan", "nat", "<na>", "null"}
+
+
+def _is_missing_token(value):
+    if value is None or value is pd.NA:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except (ValueError, TypeError):
+        return False
+    return isinstance(value, str) and value.strip().lower() in _MISSING_TOKENS
+
+
+def mask_missing(frame):
+    """把 None / NaN / 字面 'None' 'nan' 等缺失标记统一成空值，供表格展示。"""
+    if frame is None or not isinstance(frame, pd.DataFrame):
+        return frame
+    out = frame.copy()
+    for col in out.columns:
+        if out[col].dtype == object or pd.api.types.is_string_dtype(out[col]):
+            out[col] = out[col].map(lambda v: pd.NA if _is_missing_token(v) else v)
+    return out
+
+
 def display_frame(frame):
     out = frame.copy()
     for col in ('预警等级', '等级'):
         if col in out: out[col] = out[col].replace(LABELS)
     if "severity" in out: out["severity"] = out["severity"].replace({"error":"错误","warning":"提示"})
-    return out.rename(columns={"sheet":"工作表","row":"来源行","column":"字段","rule_id":"规则编号","severity":"严重程度","message":"说明"})
+    return mask_missing(out.rename(columns={"sheet":"工作表","row":"来源行","column":"字段","rule_id":"规则编号","severity":"严重程度","message":"说明"}))
+
+
+def present_frame(frame):
+    """屏幕表格用副本：缺失值写成 —，无缺失的数值列保持原类型。"""
+    view = mask_missing(display_frame(frame))
+    out = view.copy()
+    for col in out.columns:
+        if not view[col].isna().any():
+            continue
+        out[col] = [MISSING_DISPLAY if pd.isna(v) else v for v in view[col].tolist()]
+    return out
 
 def metric_explanations():
     root = Path(__file__).resolve().parents[2]
@@ -38,5 +75,5 @@ def build_report_xlsx(df, alerts=None, checks=None):
     return stream.getvalue()
 
 def build_report_html(df, alerts=None, checks=None):
-    sections=''.join(f'<h2>{escape(name)}</h2>{frame.to_html(index=False,escape=True)}' for name,frame in report_sheets(df,alerts,checks).items())
+    sections=''.join(f'<h2>{escape(name)}</h2>{frame.to_html(index=False,escape=True,na_rep=MISSING_DISPLAY)}' for name,frame in report_sheets(df,alerts,checks).items())
     return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>车险风控报告</title><style>body{font-family:sans-serif}table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #aaa;padding:6px}@media print{button{display:none}thead{display:table-header-group}tr{break-inside:avoid}h2{break-after:avoid}@page{size:A4 landscape;margin:12mm}</style><button onclick="window.print()">打印报告</button><h1>车险风控报告</h1>'+sections+'</html>'

@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from src.notification.batch import BatchJob, batch_signature, prepare_batch, recipient_preview, send_batch_item
+from src.dashboard.export import present_frame
 
 
 @st.fragment(run_every="1s")
@@ -26,7 +27,7 @@ def render_batch_status():
         st.rerun(scope="fragment")
     st.caption("暂停和终止作用于尚未开始的邮件；正在提交的一封可能仍会完成，不会自动重试。")
     if state["结果"]:
-        st.dataframe(pd.DataFrame(state["结果"]), hide_index=True, use_container_width=True)
+        st.dataframe(present_frame(pd.DataFrame(state["结果"])), hide_index=True, use_container_width=True)
 
 
 def render_batch_panel(df, threshold):
@@ -47,7 +48,7 @@ def render_batch_panel(df, threshold):
         recipients = {address for item in plan["items"] for address in [*item["to"], *item["cc"]]}
         branches = {item["record"]["机构"] for item in plan["items"]}
         st.caption(f"本次 {len(preview)} 封通知，覆盖 {len(branches)} 家机构、{len(recipients)} 个收件或抄送地址。合计行不单独发送，每机构车型保留一条；数据变化后须重新准备清单。")
-        st.dataframe(pd.DataFrame(preview), hide_index=True, use_container_width=True)
+        st.dataframe(present_frame(pd.DataFrame(preview)), hide_index=True, use_container_width=True)
     confirmed = st.checkbox("已核对本次收件人与抄送清单", key="notification_confirm")
     batch_size = st.number_input("每批发送数量", 1, 50, 5, key="notification_batch_size")
     job = st.session_state.get("notification_job")

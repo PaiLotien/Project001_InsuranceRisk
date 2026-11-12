@@ -8,6 +8,7 @@ import streamlit as st
 
 from src.alerts.lifecycle import STATES, AlertLifecycle
 from src.dashboard.theme import kpi_row, note, page_title, section
+from src.dashboard.export import present_frame
 
 
 def _fmt(ts):
@@ -49,7 +50,7 @@ def render_cases(alert_df=None):
                 "已升级": "是" if c["escalated"] else "否",
                 "最近记录": c["records"][-1].get("note", "") if c["records"] else "",
             } for c in cases])
-            st.dataframe(table, hide_index=True, use_container_width=True, height=360)
+            st.dataframe(present_frame(table), hide_index=True, use_container_width=True, height=360)
         else:
             st.info("暂无处置单。可在右侧根据预警新建。")
     with right:
@@ -84,8 +85,8 @@ def render_cases(alert_df=None):
             except (ValueError, KeyError) as exc:
                 st.error(str(exc))
         with st.expander("处置轨迹"):
-            st.dataframe(pd.DataFrame([{**r, "at": _fmt(r["at"])} for r in current["records"]]).rename(
-                columns={"status": "状态", "at": "时间", "note": "记录", "owner": "责任人"}), hide_index=True, use_container_width=True)
+            st.dataframe(present_frame(pd.DataFrame([{**r, "at": _fmt(r["at"])} for r in current["records"]]).rename(
+                columns={"status": "状态", "at": "时间", "note": "记录", "owner": "责任人"})), hide_index=True, use_container_width=True)
     else:
         st.caption("当前没有未关闭的处置单。")
     if st.button("检查超时并升级", key="case_escalate"):

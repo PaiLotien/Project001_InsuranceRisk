@@ -12,6 +12,7 @@ import streamlit as st
 
 from src.attribution.decomposition import additive_drilldown, log_decomposition, mix_rate_decomposition
 from src.dashboard.theme import kpi_row, note, plot_template, section
+from src.dashboard.export import present_frame
 
 REQUIRED = ("机构", "车型", "签单保费_万元", "赔案件数", "承保车年", "案均赔款_元")
 PORTFOLIO = "全辖"
@@ -104,7 +105,7 @@ def render_quantitative(df):
                         {"要素": "单均保费（反向）", "全辖": f"{base['单均保费_元']:,.0f} 元", region: f"{cur['单均保费_元']:,.0f} 元",
                          "对数贡献×100": round(contributions["单均保费"] * 100, 2)},
                     ])
-                    st.dataframe(table, hide_index=True, use_container_width=True)
+                    st.dataframe(present_frame(table), hide_index=True, use_container_width=True)
                     check = math.fsum(contributions.values())
                     st.caption(f"三项之和 {check * 100:+.4f} ＝ 总变化 {total * 100:+.4f}（对数恒等式，无残差）。")
                 note("赔付率＝出险频度 × 案均赔款 ÷ 单均保费；ln(地区/全辖) 可精确拆为三项之和。"
@@ -123,7 +124,7 @@ def render_quantitative(df):
             ])
             detail = result["details"].rename(columns={"mix": "结构效应(百分点)", "rate": "自身效应(百分点)"})
             detail[["结构效应(百分点)", "自身效应(百分点)"]] = (detail[["结构效应(百分点)", "自身效应(百分点)"]] * 100).round(2)
-            st.dataframe(detail.sort_values("自身效应(百分点)", ascending=False), hide_index=True, use_container_width=True)
+            st.dataframe(present_frame(detail.sort_values("自身效应(百分点)", ascending=False)), hide_index=True, use_container_width=True)
             st.caption("结构效应 ＋ 自身效应 ＝ 赔付率差异（对称分解，按车型分组）。")
 
     with tab3:
@@ -144,5 +145,5 @@ def render_quantitative(df):
                 "意外度": round(s["surprise"], 4),
                 "综合得分": round(s["score"], 5),
             } for s in slices]
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            st.dataframe(present_frame(pd.DataFrame(rows)), hide_index=True, use_container_width=True)
             st.caption("基准为“各地区按全辖同车型赔付率测算的期望赔款”，当前为实际赔款。切片可重叠，贡献不能跨切片相加。")

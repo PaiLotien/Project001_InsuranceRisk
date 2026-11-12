@@ -63,7 +63,7 @@ st.markdown("""
 
 from src.utils.helpers import detail_frame
 from src.alerts.pipeline import evaluate_frame
-from src.dashboard.export import display_frame, build_report_xlsx, build_report_html, metric_explanations
+from src.dashboard.export import display_frame, mask_missing, present_frame, build_report_xlsx, build_report_html, metric_explanations
 from src.dashboard.region_map import render_region_map, _risk_by_branch
 from src.dashboard.quant_panel import render_quantitative
 from src.dashboard.industry_panel import render_industry
@@ -167,14 +167,14 @@ with st.sidebar:
 
 
 def show_dataframe(data, *args, **kwargs):
-    if isinstance(data, pd.DataFrame): data = display_frame(data)
-    elif hasattr(data, 'data') and isinstance(data.data, pd.DataFrame): data = display_frame(data.data)
+    if isinstance(data, pd.DataFrame): data = present_frame(data)
+    elif hasattr(data, 'data') and isinstance(data.data, pd.DataFrame): data = present_frame(data.data)
     return st.dataframe(data, *args, **kwargs)
 
 
 def level_table(frame, columns, **kwargs):
     """等级中文化后按等级加克制色底，保留排序与筛选。"""
-    view = display_frame(frame[[c for c in columns if c in frame.columns]])
+    view = mask_missing(display_frame(frame[[c for c in columns if c in frame.columns]]))
     tint = {LEVEL_LABELS[k]: v for k, v in LEVEL_TINTS.items() if v}
     color = {LEVEL_LABELS[k]: v for k, v in LEVEL_COLORS.items()}
 
@@ -499,14 +499,14 @@ def render_quality(df):
         st.caption("无问题明细。")
     else:
         sev_color = {"错误": "rgba(192,57,43,0.12)", "提示": "rgba(201,162,39,0.14)"}
-        view = display_frame(issues)
-        st.dataframe(view.style.apply(lambda r: [f"background-color: {sev_color.get(r.get('严重程度'), '')}" if c == "严重程度" else "" for c in r.index], axis=1),
+        view = mask_missing(display_frame(issues))
+        st.dataframe(view.style.apply(lambda r: [f"background-color: {sev_color.get(r.get('严重程度'), '')}" if c == "严重程度" else "" for c in r.index], axis=1).format(na_rep="—"),
                      hide_index=True, use_container_width=True, height=300)
         located = _issue_cells(df, issues)
         if located is not None:
             section("问题单元格高亮")
             frame, marks = located
-            st.dataframe(frame.style.apply(lambda col: ["background-color: rgba(192,57,43,0.18); font-weight:600" if (i, col.name) in marks else "" for i in col.index]),
+            st.dataframe(mask_missing(frame).style.apply(lambda col: ["background-color: rgba(192,57,43,0.18); font-weight:600" if (i, col.name) in marks else "" for i in col.index]).format(na_rep="—"),
                          use_container_width=True, height=280)
     section("DQ001 保费占比合计校验")
     if checks.empty:
@@ -1345,7 +1345,7 @@ def render_settings():
         ("邮件服务", "已配置" if is_smtp_available() else "未配置", "", "" if is_smtp_available() else "orange", "未配置时按模拟方式记录"),
     ])
     section("数据源登记")
-    st.dataframe(pd.DataFrame([
+    show_dataframe(pd.DataFrame([
         {"数据源": SOURCE_OFFICIAL, "文件": "data/official/brvehins_2011.xlsx", "发布机构": OFFICIAL_SOURCE, "用途": "默认明细监测（州 × 车型）"},
         {"数据源": "中国行业监测视图", "文件": "data/official/china/*.csv", "发布机构": CHINA_SOURCE, "用途": "行业对标（宏观与基准）"},
         {"数据源": SOURCE_UPLOAD, "文件": "侧栏上传 Excel / CSV", "发布机构": "机构内部报表", "用途": "机构 × 车型监测"},
