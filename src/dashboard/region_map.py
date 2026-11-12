@@ -9,6 +9,8 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from src.utils.helpers import detail_frame
+from src.alerts.thresholds import configured_thresholds, _level
 
 ROOT = Path(__file__).resolve().parents[2]
 MAP_PATH = ROOT / "data" / "maps" / "china_provinces.json"
@@ -22,7 +24,7 @@ BRANCH_COORDS = {
     "山西": (37.87, 112.56), "安徽": (31.86, 117.28), "内蒙": (40.82, 111.67),
     "青岛": (36.07, 120.38), "北京": (39.90, 116.40), "天津": (39.08, 117.20),
     "宁波": (29.87, 121.55), "上海": (31.23, 121.47), "新疆": (43.79, 87.62),
-    "云南": (25.04, 102.71),
+    "云南": (25.04, 102.71), "大连": (38.91,121.61), "厦门": (24.48,118.09),
 }
 
 BRANCH_TO_GEO = {
@@ -42,20 +44,46 @@ def load_china_geojson() -> dict:
         return {"type": "FeatureCollection", "features": []}
     import json
     with MAP_PATH.open(encoding="utf-8") as f:
-        return json.load(f)
+        return _rewind_for_plotly(json.load(f))
+
+
+def _ring_area(ring):
+    return sum(x1 * y2 - x2 * y1 for (x1, y1, *_), (x2, y2, *_) in zip(ring, ring[1:] + ring[:1]))
+
+
+def _rewind_for_plotly(geojson: dict) -> dict:
+    """Plotly geo（d3-geo）要求外环顺时针、内环逆时针；方向相反时会把整个画布填满。"""
+    for feature in geojson.get("features", []):
+        geometry = feature.get("geometry") or {}
+        polygons = geometry.get("coordinates", [])
+        if geometry.get("type") == "Polygon":
+            polygons = [polygons]
+        elif geometry.get("type") != "MultiPolygon":
+            continue
+        for polygon in polygons:
+            for index, ring in enumerate(polygon):
+                clockwise = _ring_area(ring) < 0
+                if (index == 0) != clockwise:
+                    ring.reverse()
+    return geojson
 
 
 def _risk_by_branch(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or "机构" not in df.columns:
         return pd.DataFrame(columns=["机构", "风险值", "预警数"])
-    view = df.copy()
+    view = detail_frame(df)
     view["预期成本率"] = pd.to_numeric(view.get("预期成本率"), errors="coerce")
     view["预警数"] = view.get("预警等级", pd.Series(index=view.index)).isin(
         ["yellow", "orange", "red"]
     ).astype(int)
-    return view.groupby("机构", as_index=False).agg(
-        风险值=("预期成本率", "mean"), 预警数=("预警数", "sum")
-    )
+    weights = pd.to_numeric(view.get('签单保费_万元', pd.Series(0, index=view.index)), errors='coerce').fillna(0).clip(lower=0)
+    weights = weights.where(view['预期成本率'].notna(), 0)
+    view['_权重'] = weights
+    view['_加权值'] = view['预期成本率'].fillna(0) * weights
+    grouped = view.groupby('机构', as_index=False).agg(总权重=('_权重','sum'), 加权值=('_加权值','sum'), 预警数=('预警数','sum'))
+    grouped['风险值'] = grouped['加权值'].div(grouped['总权重'].where(grouped['总权重'].gt(0)))
+    return grouped
+
 
 
 def render_region_map(df: pd.DataFrame, focus_branch: str = "全辖", height: int = 470) -> None:
@@ -69,7 +97,7 @@ def render_region_map(df: pd.DataFrame, focus_branch: str = "全辖", height: in
     score_by_geo = {}
     for _, row in branch_risk.iterrows():
         geo_name = BRANCH_TO_GEO.get(str(row["机构"]))
-        if geo_name:
+        if geo_name and row["机构"] not in ("深圳", "青岛", "宁波", "大连", "厦门"):
             score_by_geo[geo_name] = max(score_by_geo.get(geo_name, 0), float(row["风险值"]))
 
     # 未出现在数据中的省份设为正常基线，保证地图始终完整显示。
@@ -82,15 +110,16 @@ def render_region_map(df: pd.DataFrame, focus_branch: str = "全辖", height: in
     fig = go.Figure(go.Choropleth(
         geojson=geojson,
         locations=locations,
-        z=z_values,
+        z=[{"normal":0,"yellow":1,"orange":2,"red":3}[_level(v, configured_thresholds())] for v in z_values],
+        customdata=z_values,
         featureidkey="properties.name",
-        colorscale=colorscale,
+        colorscale=[[0,"#4ade80"],[0.2499,"#4ade80"],[0.25,"#fbbf24"],[0.4999,"#fbbf24"],[0.5,"#fb923c"],[0.7499,"#fb923c"],[0.75,"#f87171"],[1,"#f87171"]],
         zmin=0,
-        zmax=max(110, max(z_values or [110])),
+        zmax=3,
         marker_line_color="rgba(71,85,105,.35)",
         marker_line_width=0.65,
-        colorbar=dict(title="平均成本率(%)", ticksuffix="%", thickness=12, len=0.62),
-        hovertemplate="%{location}<br>风险值：%{z:.1f}%<extra></extra>",
+        colorbar=dict(title="风险等级", tickvals=[0,1,2,3], ticktext=["正常","黄色","橙色","红色"], thickness=12, len=0.62),
+        hovertemplate="%{location}<br>风险值：%{customdata:.1f}%<extra></extra>",
     ))
 
     # 叠加机构位置和预警数量，点击/切换省份后保留业务数据感知。
@@ -108,10 +137,10 @@ def render_region_map(df: pd.DataFrame, focus_branch: str = "全辖", height: in
         point_df["颜色"] = point_df["机构"].map(lambda x: "#0f766e" if x == focus_branch else "#14b8a6")
     else:
         point_df["大小"] = point_df["预警数"].map(lambda x: max(6, min(20, 6 + x / 5)))
-        point_df["颜色"] = "#0f766e"
+        point_df["颜色"] = point_df["风险值"].map(lambda v: {"normal":"#4ade80","yellow":"#fbbf24","orange":"#fb923c","red":"#f87171"}[_level(v, configured_thresholds())])
     fig.add_trace(go.Scattergeo(
         lon=point_df["经度"], lat=point_df["纬度"], mode="markers+text" if focus_branch != "全辖" else "markers",
-        text=point_df["机构"] if focus_branch != "全辖" else None,
+        text=point_df["机构"],
         textposition="top center", textfont=dict(color="#1f2937", size=11),
         marker=dict(size=point_df["大小"], color=point_df["颜色"], line=dict(color="#475569", width=1)),
         customdata=point_df[["风险值", "预警数"]],

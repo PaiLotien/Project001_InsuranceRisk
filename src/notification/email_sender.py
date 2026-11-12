@@ -83,6 +83,7 @@ def send_email(
     to_list: list[str],
     cc_list: Optional[list[str]] = None,
     context: Any = None,
+    dry_run: bool = False,
 ) -> SendRecord:
     """发送 HTML 邮件并记录结果；未配置 SMTP 时使用 Mock。"""
     cc_list = cc_list or []
@@ -100,7 +101,7 @@ def send_email(
         return record
 
     try:
-        cfg = _smtp_config()
+        cfg = {} if dry_run else _smtp_config()
     except (ValueError, TypeError):
         record = SendRecord(send_id, datetime.now().isoformat(), list(to_list), list(cc_list),
                             subject, body[:200], "failed", "SMTP 端口配置无效", "smtp")

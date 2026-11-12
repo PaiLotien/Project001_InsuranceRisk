@@ -60,6 +60,7 @@ rules:
     enabled: true
     description: "出险频度月同比上升超过1个百分点，提示事故频率可能恶化。"
     applies_to: [T2, T3]
+    precondition_logic: any
     preconditions:
       - metric: 满期保费
         operator: gt
@@ -72,7 +73,7 @@ rules:
         unit: month
         time_dimension: 当月
     source: "预警规则配置表.xlsx R008；第二轮问卷问题10"
-    note: "当前适配月同比与当月前置数据；两个条件必须同时满足，保费单位万元、进度单位月。非短期单口径需上游保证；等级与推送对象待确认。"
+    note: "当前适配月同比与当月前置数据；两个条件满足任意一个即可，保费单位万元、进度单位月。非短期单口径需上游保证；等级与推送对象待确认。"
 
   - id: R009
     metric: 自主系数均值商业
@@ -97,3 +98,21 @@ rules:
     applies_to: [T1, T2]
     source: "系统原有业务经验阈值；问卷E4仅为问题设置说明，并非业务确认答复"
     note: "保留既有行为，待业务确认，不计入Excel四条明确阈值规则。"
+
+  # 默认参考值，待业务确认；红色仍严格大于100%。
+  - id: R011
+    metric: 预期成本率
+    operator: gt
+    threshold: 95
+    unit: percent
+    level: orange
+    enabled: true
+    description: "预期成本率超过95%，触发橙色预警；默认参考值，待业务确认。"
+
+# 组合条件引用同机构、车型、期间、区块及维度的规则命中结果；只升一级，最高红色。
+# R008 已包含频度恶化的业务前置条件，R007 为案均恶化。
+combinations:
+  - id: C001
+    expression: R008 AND R007
+    action: upgrade_one
+    enabled: true

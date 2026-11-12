@@ -6,6 +6,8 @@ from typing import Any
 
 import pandas as pd
 import yaml
+from src.utils.helpers import is_total_row, detail_frame
+from src.rules.expressions import COMPARATORS, matrix_threshold
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,15 +28,18 @@ def load_quality_config() -> dict[str, Any]:
         return yaml.safe_load(f) or {"rules": []}
 
 
-def configured_thresholds() -> dict[str, float]:
+def configured_thresholds(include_user=True) -> dict[str, float]:
     """从 YAML 找到预期成本率各等级阈值，避免页面重复写数字。"""
-    result = {"yellow": 90.0, "orange": 100.0, "red": 100.0}
+    result = {"yellow": 90.0, "orange": 95.0, "red": 100.0}
     for rule in load_alert_config().get("rules", []):
         if rule.get("metric") != "预期成本率" or not rule.get("enabled", True):
             continue
         level = str(rule.get("level", "yellow")).lower()
         if level in result:
             result[level] = float(rule.get("threshold", result[level]))
+    if include_user:
+        from src.config.threshold_store import load_user_thresholds
+        result.update(load_user_thresholds())
     return result
 
 
@@ -42,11 +47,11 @@ def _level(value: float, thresholds: dict[str, float]) -> str:
     if pd.isna(value):
         return "normal"
     # 规则引擎采用“最高等级优先”：红 > 橙 > 黄。
-    if value > thresholds["red"]:
+    if COMPARATORS["gt"](value, thresholds["red"]):
         return "red"
-    if value > thresholds["orange"] and thresholds["orange"] < thresholds["red"]:
+    if COMPARATORS["gt"](value, thresholds["orange"]) and thresholds["orange"] < thresholds["red"]:
         return "orange"
-    if value > thresholds["yellow"]:
+    if COMPARATORS["gt"](value, thresholds["yellow"]):
         return "yellow"
     return "normal"
 
@@ -78,9 +83,15 @@ def apply_alert_rules(df: pd.DataFrame, yellow_threshold: float | None = None) -
         if yellow_threshold is not None:
             thresholds["yellow"] = float(yellow_threshold)
         values = pd.to_numeric(out["预期成本率"], errors="coerce")
-        out["预警等级"] = values.map(lambda value: _level(value, thresholds))
+        out["预警等级"] = [
+            _level(value, {**thresholds,
+                'yellow':matrix_threshold(row.get('机构',''),row.get('车型',''),'R005',thresholds['yellow']),
+                'orange':matrix_threshold(row.get('机构',''),row.get('车型',''),'R011',thresholds['orange']),
+                'red':matrix_threshold(row.get('机构',''),row.get('车型',''),'R010',thresholds['red'])})
+            for value,(_,row) in zip(values,out.iterrows())]
     else:
         out["预警等级"] = "normal"
+    out.loc[out.apply(is_total_row, axis=1), "预警等级"] = "normal"
     out.attrs["yellow_threshold"] = yellow_threshold
     return out
 
@@ -100,10 +111,10 @@ def validation_summary(df: pd.DataFrame, tolerance: float | None = None) -> pd.D
         tolerance = float(dq001.get("tolerance_percentage_points", 1.0))
 
     if dq001.get("enabled", True) and {"机构", "车型", "保费占比"}.issubset(df.columns):
-        base = df[df["车型"].ne("合计")].copy()
+        base = detail_frame(df)
         if "表类型" in base.columns:
             base = base[base["表类型"].eq("主表")]
-        for branch, group in base.groupby("机构", dropna=False):
+        for branch, group in base.groupby([c for c in ("机构", "来源Sheet", "数据区块", "期间") if c in base], dropna=False):
             values = pd.to_numeric(group["保费占比"], errors="coerce")
             valid = values.notna().all() and values.between(0, 100).all() and pd.notna(branch) and bool(str(branch).strip())
             if valid:
@@ -120,7 +131,7 @@ def validation_summary(df: pd.DataFrame, tolerance: float | None = None) -> pd.D
             rows.append({
                 "规则ID": "DQ001",
                 "校验规则": "保费占比合计≈100%",
-                "机构": branch,
+                "机构": branch[0] if isinstance(branch, tuple) else branch,
                 "实际值": round(float(total), 2),
                 "容忍误差": f"±{tolerance:g}个百分点",
                 "结果": status,
@@ -156,7 +167,7 @@ def quality_details(df: pd.DataFrame, checks: pd.DataFrame) -> pd.DataFrame:
     parts = []
     for _, check in failures.iterrows():
         mask = df["机构"].isna() if pd.isna(check["机构"]) else df["机构"].eq(check["机构"])
-        part = df[mask & df["车型"].ne("合计")].copy()
+        part = detail_frame(df[mask])
         if "表类型" in part.columns:
             part = part[part["表类型"].eq("主表")]
         part["机构合计"] = check["实际值"]
@@ -221,7 +232,7 @@ def cross_report_premium_check(t2: pd.DataFrame, t7: pd.DataFrame) -> pd.DataFra
             except (InvalidOperation, TypeError, ValueError):
                 left_value = right_value = None
                 detail = "金额缺失或不是有限数值"
-        rows.append({"规则ID": "DQ002", "机构": branch,
+        rows.append({"规则ID": "DQ002", "机构": branch[0] if isinstance(branch, tuple) else branch,
                      "T2当月累计签单保费": str(left_value) if left_value is not None else None,
                      "T7月签单保费": str(right_value) if right_value is not None else None,
                      "差额": str(difference) if difference is not None else None, "结果": status, "说明": detail})

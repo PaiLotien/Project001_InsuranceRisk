@@ -51,10 +51,12 @@ def _alert_fields(alert: Any, threshold: float | None = None) -> dict:
         vehicle = alert.get("车型", "")
         metric_name = alert.get("metric_name", "预期成本率")
         current_value = alert.get("预期成本率", 0)
+        if raw_level in ("orange", "red"):
+            threshold = configured_thresholds()[raw_level]
         if threshold is None:
-            threshold = configured_thresholds()["yellow"]
-            if float(threshold).is_integer():
-                threshold = int(threshold)
+            threshold = configured_thresholds().get(raw_level, configured_thresholds()["yellow"])
+        if float(threshold).is_integer():
+            threshold = int(threshold)
 
     return {
         "level": level_value,

@@ -57,3 +57,16 @@ def read_rows(ws, max_rows: int = 100) -> list[list]:
                 values.append(str(cell))
         rows.append(values)
     return rows
+
+
+def excel_engine():
+    """表格读取优先 calamine；带合并单元格的结构解析保留 openpyxl。"""
+    try:
+        import python_calamine  # noqa: F401
+        return 'calamine'
+    except ImportError:
+        return 'openpyxl'
+
+def read_excel(source, **kwargs):
+    import pandas as pd
+    return pd.read_excel(source, engine=excel_engine(), **kwargs)

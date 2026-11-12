@@ -7,6 +7,13 @@ from zipfile import BadZipFile
 
 import openpyxl
 import pandas as pd
+from src.parser.excel_loader import excel_engine, read_excel
+from src.validation.schema import validate_frame, top3
+try:
+    from python_calamine import CalamineError
+except ImportError:
+    class CalamineError(ValueError):
+        pass
 from openpyxl.utils.exceptions import InvalidFileException
 
 from src.alerts.thresholds import apply_alert_rules
@@ -29,9 +36,9 @@ def list_upload_sheets(uploaded_file) -> list[str]:
     if Path(str(getattr(uploaded_file, "name", ""))).suffix.lower() == ".csv":
         return ["CSV"]
     try:
-        with pd.ExcelFile(_input(uploaded_file)) as workbook:
+        with pd.ExcelFile(_input(uploaded_file), engine=excel_engine()) as workbook:
             names = list(workbook.sheet_names)
-    except (OSError, ValueError, BadZipFile, InvalidFileException, ParseError) as exc:
+    except (OSError, ValueError, BadZipFile, InvalidFileException, ParseError, CalamineError) as exc:
         raise UploadReadError(f"无法读取文件，请检查格式和内容：{exc}") from exc
     # 明确命名的主表优先；仍允许用户在侧栏切换，而不是静默覆盖。
     def priority(name):
@@ -64,8 +71,8 @@ def read_uploaded_data(uploaded_file, source_sheet: str | None = None) -> pd.Dat
             finally:
                 workbook.close()
             if not blocks:
-                frame = pd.read_excel(_input(uploaded_file), sheet_name=source_sheet)
-    except (OSError, ValueError, BadZipFile, InvalidFileException, ParseError) as exc:
+                frame = read_excel(_input(uploaded_file), sheet_name=source_sheet)
+    except (OSError, ValueError, BadZipFile, InvalidFileException, ParseError, CalamineError) as exc:
         raise UploadReadError(f"无法读取文件，请检查格式和内容：{exc}") from exc
 
     ignored_blocks = 0
@@ -86,6 +93,7 @@ def read_uploaded_data(uploaded_file, source_sheet: str | None = None) -> pd.Dat
         if period is None:
             raise UploadReadError("主表缺少当日、当月或当年绝对值，不能用同比值计算成本率")
         frame = pd.concat(selected, ignore_index=True)
+        all_periods = frame.to_dict("records")
         frame = frame[frame["期间"].eq(period)].copy()
 
     if "来源Sheet" not in frame.columns:
@@ -94,8 +102,14 @@ def read_uploaded_data(uploaded_file, source_sheet: str | None = None) -> pd.Dat
         frame = unique_records(frame)
     except ValueError as exc:
         raise UploadReadError(str(exc)) from exc
+    smart_issues = validate_frame(frame, source_sheet)
     frame = apply_alert_rules(frame)
     frame = annotate_validation(frame, validate_core_frame(frame))
+    frame.attrs["smart_validation"] = smart_issues.to_dict("records")
+    frame.attrs["quality_top3"] = top3(smart_issues)
+    frame.attrs["all_periods"] = all_periods if blocks else frame.to_dict("records")
+    frame.attrs["unit_warnings"] = list(dict.fromkeys(w for b in blocks for w in b.attrs.get("unit_warnings", [])))
+    frame.attrs["blocks"] = [{"区块": i+1, "行数": len(b[[c for c in ("来源行",) if c in b]].drop_duplicates()), "状态": "参与分析" if not b.empty and b.iloc[0]["表类型"] == "主表" else "排除：细分口径，避免重复计数"} for i,b in enumerate(blocks)]
     frame.attrs["source_info"] = {"主数据源": source_sheet, "忽略其他Sheet数": len(names) - 1,
                                   "识别区块数": len(blocks), "排除细分区块数": ignored_blocks}
     return frame

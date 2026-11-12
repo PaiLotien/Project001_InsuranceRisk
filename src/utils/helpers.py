@@ -95,3 +95,13 @@ def generate_demo_data(
         row["保费占比"] = round(row["保费占比"] / total_pct * 100, 1)
 
     return data
+
+
+def is_total_row(row) -> bool:
+    """识别机构、车型或序号中的合计标记，忽略全部空白。"""
+    values = [row.get(k, "") for k in ("车型", "机构", "序号")] if hasattr(row, "get") else [row]
+    return any(re.search(r"(?:合计|小计|总计)$", re.sub(r"\s+", "", safe_str(v))) is not None for v in values)
+
+
+def detail_frame(frame):
+    return frame.loc[~frame.apply(is_total_row, axis=1)].copy() if not frame.empty else frame.copy()

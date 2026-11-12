@@ -1,5 +1,7 @@
 """冻结收件人后执行批量通知；暂停和终止只影响尚未开始的邮件。"""
 
+from src.utils.helpers import detail_frame
+
 import hashlib
 import threading
 import time
@@ -12,7 +14,8 @@ from src.notification.address_input import parse_addresses
 
 
 def unique_alerts(df):
-    view = df[df["车型"].ne("合计") & df["预警等级"].isin(["red", "orange", "yellow"])].copy()
+    view = detail_frame(df)
+    view = view[view["预警等级"].isin(["red", "orange", "yellow"])].copy()
     view["_level"] = view["预警等级"].map({"red": 0, "orange": 1, "yellow": 2})
     view = view.sort_values(["_level", "预期成本率"], ascending=[True, False], kind="stable")
     return view.drop_duplicates(["机构", "车型"], keep="first").drop(columns="_level")

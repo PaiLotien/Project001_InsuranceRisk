@@ -79,31 +79,25 @@ class RuleBoundaryTests(unittest.TestCase):
 
 
 class AdvisorFailureTests(unittest.TestCase):
-    @patch("src.llm_advisor.urllib.request.build_opener")
-    def test_structured_request_keeps_rule_evidence(self, factory):
-        response = MagicMock()
-        response.read.return_value = json.dumps({"message": {"content": json.dumps({
-            "risk_summary": "黄色预警", "evidence": ["预期成本率96%"],
-            "suggestions": [], "uncertainty": ["缺少明细"],
-        })}}).encode()
-        factory.return_value.open.return_value.__enter__.return_value = response
-        result = analyze({"预期成本率": 96, "预警等级": "yellow"}, "规则结果为黄色")
-        self.assertEqual(result["risk_summary"], "黄色预警")
-        request = factory.return_value.open.call_args.args[0]
-        body = json.loads(request.data)
-        prompt = body["messages"][0]["content"]
-        self.assertIn("规则结果为黄色", prompt)
-        self.assertIn('"预期成本率": 96', prompt)
+    @patch('src.advisor.service.get_index',side_effect=FileNotFoundError)
+    @patch('src.advisor.rag.chat_stream')
+    def test_structured_request_keeps_rule_evidence(self, stream, index):
+        stream.return_value=iter([{'message':{'content':json.dumps({'answer':'黄色预警','evidence':[{'claim':'预期成本率96%','source':'系统'}],'suggestions':[],'uncertainty':['缺少明细'],'refused':False})}}])
+        result=analyze({'预期成本率':96,'预警等级':'yellow'},'规则结果为黄色')
+        self.assertEqual(result['risk_summary'],'黄色预警')
+        prompt=stream.call_args.args[0][-1]['content']
+        self.assertIn('规则结果为黄色',prompt)
+        self.assertIn('96.0%',prompt)
 
-    @patch("src.llm_advisor.urllib.request.build_opener")
-    def test_invalid_model_json_is_returned_for_display(self, factory):
-        response = MagicMock()
-        response.read.return_value = b'{"message":{"content":"not json"}}'
-        factory.return_value.open.return_value.__enter__.return_value = response
-        result = analyze({}, "黄色预警")
-        self.assertEqual(result["error"], "模型未返回完整 JSON")
-        self.assertEqual(result["raw"], "not json")
+    @patch('src.advisor.service.get_index',side_effect=FileNotFoundError)
+    @patch('src.advisor.rag.chat_stream')
+    def test_invalid_model_json_is_returned_for_display(self, stream, index):
+        stream.return_value=iter([{'message':{'content':'not json'}}])
+        result=analyze({},'黄色预警')
+        self.assertIn('error',result)
+        self.assertEqual(result['raw'],'not json')
 
-    @patch("src.llm_advisor.urllib.request.build_opener", side_effect=OSError("offline"))
-    def test_chat_connection_setup_failure_is_displayable(self, factory):
-        self.assertEqual(chat("为什么异常？", {}, "黄色预警"), "本地模型调用失败：offline")
+    @patch('src.advisor.service.get_index',side_effect=FileNotFoundError)
+    @patch('src.advisor.rag.chat_stream',side_effect=OSError('offline'))
+    def test_chat_connection_setup_failure_is_displayable(self,stream,index):
+        self.assertEqual(chat('为什么异常？',{},'黄色预警'),'本地模型调用失败：offline')

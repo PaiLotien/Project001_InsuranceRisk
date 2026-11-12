@@ -56,20 +56,15 @@ def test_dataframe_numeric_scalars_are_valid(value):
 
 
 def test_ai_page_uses_configured_thresholds_without_model_call():
-    path = Path(__file__).resolve().parents[1] / "src/dashboard/streamlit_app.py"
-    captured = []
-
-    def model_result(record, rule_text):
-        captured.append(rule_text)
-        return {"risk_summary": "测试说明", "evidence": [], "suggestions": [], "uncertainty": []}
-
-    with patch("src.alerts.thresholds.configured_thresholds", return_value={"yellow": 88, "orange": 105, "red": 105}):
-        app = AppTest.from_file(path, default_timeout=30).run()
-        app.sidebar.radio[0].set_value("AI建议原型").run()
-        with patch("src.llm_advisor.analyze", side_effect=model_result):
-            button = next(b for b in app.button if b.label == "调用本地 qwen3.5:4b 生成建议")
-            button.click().run()
-    assert not app.exception
-    assert len(captured) == 1
-    assert "黄色阈值=88%" in captured[0]
-    assert "红色阈值=105%" in captured[0]
+    path = Path(__file__).resolve().parents[1] / 'src/dashboard/streamlit_app.py'
+    health={'online':False,'chat_model':False,'embed_model':False,'manifest':{},'stale':True}
+    result={'raw':'测试','json':{'answer':'测试说明','evidence':[],'suggestions':[],'uncertainty':[],'refused':False},'hits':[],'invalid_citations':[],'untraced_numbers':[],'timing':{}}
+    with patch('src.alerts.thresholds.configured_thresholds',return_value={'yellow':88,'orange':95,'red':105}), patch('src.advisor.service.advisor_health',return_value=health):
+        app=AppTest.from_file(path,default_timeout=30).run()
+        app.sidebar.radio[0].set_value('AI 风控顾问').run()
+        with patch('src.advisor.service.ask_advisor',return_value=result) as ask:
+            next(b for b in app.button if b.label=='生成预警解读').click().run()
+            assert not app.exception
+            assert ask.call_count==1
+            assert ask.call_args.args[1]['黄色阈值']=='88.0%'
+            assert ask.call_args.args[1]['红色阈值']=='105.0%'

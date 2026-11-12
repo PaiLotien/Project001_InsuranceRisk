@@ -14,8 +14,8 @@ def condition_evidence(condition, row):
     multiplier = condition.get("multiplier", 1)
     evidence = {
         "字段": name,
-        "原始值": str(actual),
-        "条件": f"{op} {target} × {multiplier}",
+        "原始值": "—" if actual is None or str(actual).lower() in {"nan", "<na>", "none", ""} else str(actual),
+        "条件": f"{dict(gt='高于', gte='不低于', lt='低于', lte='不高于', eq='等于', **{'in':'属于'}).get(op, op)} {'同车型均值' if target == 'mean' else target if target is not None else '—'} × {multiplier}",
         "结果": "无法判断",
         "原因": "",
         "matched": False,

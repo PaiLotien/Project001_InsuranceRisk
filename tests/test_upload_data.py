@@ -72,7 +72,7 @@ def test_upload_error_is_visible_in_sidebar():
     record = UploadedFileRec("broken-ui-r3", "broken_ui.xlsx", "application/octet-stream", b"broken file for ui test")
     stream = UploadedFile(record, FileURLs())
     with patch("streamlit.delta_generator.DeltaGenerator.file_uploader", return_value=stream):
-        app.sidebar.radio[1].set_value("上传Excel文件").run()
+        app.sidebar.radio[1].set_value("上传机构数据").run()
     assert not app.exception
     assert any("无法读取文件" in error.value for error in app.sidebar.error)
 
@@ -85,7 +85,7 @@ def test_internal_upload_error_is_logged_and_visible(caplog):
     uploaded = UploadedFile(record, FileURLs())
     with patch("streamlit.delta_generator.DeltaGenerator.file_uploader", return_value=uploaded):
         with patch("src.parser.upload_data.validate_core_frame", side_effect=ValueError("internal validation bug")):
-            app.sidebar.radio[1].set_value("上传Excel文件").run()
+            app.sidebar.radio[1].set_value("上传机构数据").run()
     assert not app.exception
     assert any("数据处理异常" in error.value for error in app.sidebar.error)
     assert any(record.exc_info and "内部异常" in record.message for record in caplog.records)

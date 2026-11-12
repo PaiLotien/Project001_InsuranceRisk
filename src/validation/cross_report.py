@@ -45,7 +45,11 @@ def _t2_frame(wb) -> tuple[pd.DataFrame, list[str]]:
         # 只取“签单保费 × 当月”。当日值、月同比和月环比不能作为 DQ002 左值。
         metrics = []
         for metric in parsed.metrics:
-            if metric.metric_name == METRIC_SIGNED_PREMIUM and metric.time_dimension == "当月" and metric.table_role == "主表":
+            if (
+                metric.metric_name == METRIC_SIGNED_PREMIUM
+                and metric.time_dimension == "当月"
+                and metric.table_role == "主表"
+            ):
                 metrics.append(metric)
         if not metrics:
             notes.append(f"T2 Sheet“{sheet_name}”未抽取到“签单保费-当月”")
@@ -69,12 +73,18 @@ def _t2_frame(wb) -> tuple[pd.DataFrame, list[str]]:
             total = sum(amounts.values(), Decimal(0)) if not conflict else None
             if conflict:
                 notes.append(f"{sheet_name} 区块{block}存在重复或冲突总额，不能自动合并")
-            rows.append({"机构": _branch_text(branch), "当月累计签单保费": total,
-                         "来源Sheet": f"{sheet_name} / 区块{block}"})
+            rows.append(
+                {
+                    "机构": _branch_text(branch),
+                    "当月累计签单保费": total,
+                    "来源行号": chosen[0].source_row or None,
+                    "来源Sheet": f"{sheet_name} / 区块{block}",
+                }
+            )
 
     if matched == 0:
         notes.append("未识别到 T2（分车型预期成本率监控表（日月年））")
-    return pd.DataFrame(rows, columns=["机构", "当月累计签单保费", "来源Sheet"]), notes
+    return pd.DataFrame(rows, columns=["机构", "当月累计签单保费", "来源Sheet", "来源行号"]), notes
 
 
 def _t7_frame(wb) -> tuple[pd.DataFrame, list[str]]:
@@ -112,7 +122,7 @@ def _t7_frame(wb) -> tuple[pd.DataFrame, list[str]]:
             notes.append(f"T7 Sheet“{sheet_name}”未识别到“机构-月签单保费”双层表头")
             continue
         header_index, branch_col, premium_col = header
-        for row in values[header_index + 2 :]:
+        for source_row, row in enumerate(values[header_index + 2 :], start=header_index + 3):
             raw_branch = None
             if branch_col < len(row):
                 raw_branch = row[branch_col]
@@ -127,11 +137,11 @@ def _t7_frame(wb) -> tuple[pd.DataFrame, list[str]]:
             value = pd.to_numeric(pd.Series([raw_value]), errors="coerce").iloc[0]
             if pd.isna(value):
                 continue
-            rows.append({"机构": branch, "月签单保费": float(value), "来源Sheet": sheet_name})
+            rows.append({"机构": branch, "月签单保费": float(value), "来源Sheet": sheet_name, "来源行号": source_row})
 
     if matched == 0:
         notes.append("未识别到 T7（分机构车险日平台监控表）")
-    return pd.DataFrame(rows, columns=["机构", "月签单保费", "来源Sheet"]), notes
+    return pd.DataFrame(rows, columns=["机构", "月签单保费", "来源Sheet", "来源行号"]), notes
 
 
 def extract_dq002_inputs(wb) -> CrossReportInputs:
@@ -149,3 +159,29 @@ def run_dq002(wb) -> tuple[CrossReportInputs, pd.DataFrame]:
     if not inputs.ready:
         return inputs, pd.DataFrame()
     return inputs, cross_report_premium_check(inputs.t2, inputs.t7)
+
+
+def cross_report_issues(t2, t7, left_sheet="T2", right_sheet="T7"):
+    """复用 DQ002 对账口径，输出统一问题结构（右表缺失行号为空）。"""
+    from src.validation.schema import ISSUE_COLUMNS
+
+    result = cross_report_premium_check(t2, t7)
+    issues = []
+    for _, row in result.iterrows():
+        if row["结果"] == "通过":
+            continue
+        branch = row.get("机构", "")
+        for frame, sheet, column in [(t2, left_sheet, "当月累计签单保费"), (t7, right_sheet, "月签单保费")]:
+            positions = [i for i, (_, r) in enumerate(frame.iterrows()) if r.get("机构") == branch]
+            for pos in positions or [None]:
+                issues.append(
+                    dict(
+                        sheet=(frame.iloc[pos].get("来源Sheet", sheet) if pos is not None else sheet),
+                        row=(frame.iloc[pos].get("来源行号", pos + 2) if pos is not None else None),
+                        column=column,
+                        rule_id="DQ002",
+                        severity="error",
+                        message=str(row.to_dict()),
+                    )
+                )
+    return pd.DataFrame(issues, columns=ISSUE_COLUMNS)

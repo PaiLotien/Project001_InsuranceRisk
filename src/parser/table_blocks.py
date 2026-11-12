@@ -11,7 +11,7 @@ METRICS = {
     "保费占比": "保费占比", "签单保费": "签单保费_万元", "成本率1": "成本率1",
     "预期赔付率": "预期赔付率", "预期成本率": "预期成本率", "单均保费": "单均保费_元",
     "累计出险频度": "累计出险频度", "出险频度": "累计出险频度",
-    "自主定价系数": "自主定价系数", "自主系数": "自主定价系数", "案均赔款": "案均赔款",
+    "自主定价系数": "自主定价系数", "自主系数": "自主定价系数", "案均赔款": "案均赔款", "满期保费": "满期保费", "满期进度": "满期进度",
 }
 PERIODS = ("当日", "当月", "当年", "月同比", "月环比", "同期", "同比", "同比率")
 
@@ -82,6 +82,8 @@ def read_table_blocks(ws) -> list[pd.DataFrame]:
         start = header + 2 if double_header else header + 1
         for i in range(start, end):
             raw = rows[i]
+            if any(a.min_row == i + 1 and a.max_col - a.min_col >= 2 for a in ws.merged_cells.ranges):
+                continue
             vehicle = safe_str(merged.get((i + 1, vehicle_col + 1), raw[vehicle_col]))
             if not vehicle or vehicle == "车型":
                 continue
@@ -92,7 +94,15 @@ def read_table_blocks(ws) -> list[pd.DataFrame]:
                     continue
                 if "%" in ws.cell(i + 1, j + 1).number_format and metric not in ("签单保费_万元", "单均保费_元", "案均赔款"):
                     value *= 100
+                unit_context = safe_str(merged.get((header + 1, j + 1), rows[header][j]))
+                unit_context += " " + context
+                if period not in ("月同比", "月环比", "同比", "同比率"):
+                    if metric in ("签单保费_万元", "满期保费") and re.search(r"(?:签单保费|满期保费)(?:单位)?[：:（( ]*元", unit_context): value /= 10000
+                    if metric in ("单均保费_元", "案均赔款") and re.search(r"(?:单均保费|案均赔款)(?:单位)?[：:（( ]*万元", unit_context): value *= 10000
                 values.setdefault(period, {})[metric] = value
+            serial = raw[names.index("序号")] if "序号" in names else None
+            if not values and safe_float(serial) is None:
+                continue
             # 空模板仍保留车型行；有多种时间列时分别保留，不混成一条记录。
             if not values:
                 period = next((p for p in ("当日", "当月", "当年") if any(s[2] == p for s in specs)), "当日")
@@ -112,5 +122,13 @@ def read_table_blocks(ws) -> list[pd.DataFrame]:
                 records.append(record)
         frame = pd.DataFrame(records)
         frame.attrs["header_row"] = header + 1
+        warnings = []
+        for j, metric, period in specs:
+            if metric not in ('预期赔付率','成本率1','预期成本率','保费占比','累计出险频度'): continue
+            numbers = [safe_float(rows[r][j]) for r in range(start,end) if j < len(rows[r])]
+            numbers = [v for v in numbers if v is not None]
+            if numbers and max(abs(v) for v in numbers) <= 1.5 and not any('%' in ws.cell(r+1,j+1).number_format for r in range(start,end)):
+                warnings.append(f"{metric}（{period}）为无百分号小数，请确认是否需要乘100；当前保留原值，避免误判单位。")
+        frame.attrs['unit_warnings'] = warnings
         blocks.append(frame)
     return blocks
